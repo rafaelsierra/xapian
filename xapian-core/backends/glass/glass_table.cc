@@ -1,4 +1,4 @@
-/** @file glass_table.cc
+/** @file
  * @brief Btree implementation
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -1430,6 +1430,10 @@ GlassTable::readahead_key(const string &key) const
     LOGCALL(DB, bool, "GlassTable::readahead_key", key);
     Assert(!key.empty());
 
+    // An overlong key cannot be found.
+    if (key.size() > GLASS_BTREE_MAX_KEY_LEN)
+	RETURN(false);
+
     // Three cases:
     //
     // handle == -1:  Lazy table in a multi-file database which isn't yet open.
@@ -2081,7 +2085,7 @@ GlassTable::next_for_sequential(Glass::Cursor * C_, int /*dummy*/) const
     int c = C_[0].c;
     AssertRel(c,<,DIR_END(p));
     c += D2;
-    Assert((unsigned)c < block_size);
+    Assert(unsigned(c) < block_size);
     if (c == DIR_END(p)) {
 	uint4 n = C_[0].get_n();
 	while (true) {
@@ -2137,7 +2141,7 @@ GlassTable::prev_default(Glass::Cursor * C_, int j) const
     int c = C_[j].c;
     AssertRel(DIR_START,<=,c);
     AssertRel(c,<,DIR_END(p));
-    AssertRel((unsigned)DIR_END(p),<=,block_size);
+    AssertRel(unsigned(DIR_END(p)),<=,block_size);
     if (c == DIR_START) {
 	if (j == level) RETURN(false);
 	if (!prev_default(C_, j + 1)) RETURN(false);
@@ -2160,7 +2164,7 @@ GlassTable::next_default(Glass::Cursor * C_, int j) const
     const uint8_t * p = C_[j].get_p();
     int c = C_[j].c;
     AssertRel(c,<,DIR_END(p));
-    AssertRel((unsigned)DIR_END(p),<=,block_size);
+    AssertRel(unsigned(DIR_END(p)),<=,block_size);
     c += D2;
     if (j > 0) {
 	AssertRel(DIR_START,<,c);

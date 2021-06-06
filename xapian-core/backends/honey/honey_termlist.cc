@@ -1,4 +1,4 @@
-/** @file honey_termlist.cc
+/** @file
  * @brief A TermList in a honey database.
  */
 /* Copyright (C) 2007,2008,2009,2010,2011,2018 Olly Betts
@@ -100,7 +100,8 @@ void
 HoneyTermList::accumulate_stats(Xapian::Internal::ExpandStats& stats) const
 {
     Assert(!at_end());
-    stats.accumulate(current_wdf,
+    stats.accumulate(shard_index,
+		     current_wdf,
 		     doclen,
 		     get_termfreq(),
 		     db->get_doccount());

@@ -1,7 +1,7 @@
-/** @file multi_database.h
+/** @file
  *  @brief Sharded database backend
  */
-/* Copyright 2017 Olly Betts
+/* Copyright 2017,2019 Olly Betts
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -21,21 +21,27 @@
 #ifndef XAPIAN_INCLUDED_MULTI_DATABASE_H
 #define XAPIAN_INCLUDED_MULTI_DATABASE_H
 
-#include "api/postlist.h"
 #include "api/termlist.h"
 #include "backends/databaseinternal.h"
 #include "backends/valuelist.h"
 
+class LeafPostList;
 class Matcher;
 class ValueStreamDocument;
 
 namespace Xapian {
 struct ReplicationInfo;
+namespace Internal {
+class PostList;
 }
+}
+
+using Xapian::Internal::PostList;
 
 /// Sharded database backend.
 class MultiDatabase : public Xapian::Database::Internal {
     friend class Matcher;
+    friend class PostListTree;
     friend class ValueStreamDocument;
     friend class Xapian::Database;
 
@@ -102,6 +108,8 @@ class MultiDatabase : public Xapian::Database::Internal {
     Xapian::termcount get_doclength(Xapian::docid did) const;
 
     Xapian::termcount get_unique_terms(Xapian::docid did) const;
+
+    Xapian::termcount get_wdfdocmax(Xapian::docid did) const;
 
     Xapian::Document::Internal* open_document(Xapian::docid did,
 					      bool lazy) const;
@@ -173,6 +181,12 @@ class MultiDatabase : public Xapian::Database::Internal {
     void clear_synonyms(const std::string& term) const;
 
     void set_metadata(const std::string& key, const std::string& value);
+
+    std::string reconstruct_text(Xapian::docid did,
+				 size_t length,
+				 const std::string& prefix,
+				 Xapian::termpos start_pos,
+				 Xapian::termpos end_pos) const;
 
     std::string get_description() const;
 };

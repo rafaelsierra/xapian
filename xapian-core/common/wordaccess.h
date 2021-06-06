@@ -1,4 +1,4 @@
-/** @file wordaccess.h
+/** @file
  * @brief functions for reading and writing different width words
  */
 /* Copyright (C) 2016,2018,2019 Olly Betts
@@ -35,8 +35,6 @@
 
 #include "alignment_cast.h"
 #include "omassert.h"
-
-#ifndef WORDS_BIGENDIAN
 
 #if HAVE_DECL__BYTESWAP_USHORT || HAVE_DECL__BYTESWAP_ULONG
 # include <stdlib.h>
@@ -81,8 +79,6 @@ inline uint64_t do_bswap(uint64_t value) {
 	   (value >> 56);
 # endif
 }
-
-#endif
 
 template<typename UINT>
 inline UINT

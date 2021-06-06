@@ -1,4 +1,4 @@
-/** @file multiandpostlist.cc
+/** @file
  * @brief N-way AND postlist
  */
 /* Copyright (C) 2007,2009,2011,2012,2015,2017 Olly Betts
@@ -127,7 +127,9 @@ MultiAndPostList::get_termfreq_est_using_stats(
 	// If the collection is empty, freqest should be 0 already, so leave
 	// it alone.
 	freqest = (freqest * freqs.termfreq) / stats.collection_size;
-	collfreqest = (collfreqest * freqs.collfreq) / stats.total_term_count;
+	if (usual(stats.total_length != 0)) {
+	    collfreqest = (collfreqest * freqs.collfreq) / stats.total_length;
+	}
 
 	// If the rset is empty, relfreqest should be 0 already, so leave
 	// it alone.
@@ -148,12 +150,13 @@ MultiAndPostList::get_docid() const
 
 double
 MultiAndPostList::get_weight(Xapian::termcount doclen,
-			     Xapian::termcount unique_terms) const
+			     Xapian::termcount unique_terms,
+			     Xapian::termcount wdfdocmax) const
 {
     Assert(did);
     double result = 0;
     for (size_t i = 0; i < n_kids; ++i) {
-	result += plist[i]->get_weight(doclen, unique_terms);
+	result += plist[i]->get_weight(doclen, unique_terms, wdfdocmax);
     }
     return result;
 }

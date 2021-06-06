@@ -1,4 +1,4 @@
-/** @file orpositionlist.h
+/** @file
  * @brief Merge two PositionList objects using an OR operation.
  */
 /* Copyright (C) 2007,2010,2017 Olly Betts
@@ -22,7 +22,7 @@
 #define XAPIAN_INCLUDED_ORPOSITIONLIST_H
 
 #include "backends/positionlist.h"
-#include "api/postlist.h"
+#include "backends/postlist.h"
 
 #include "xapian/error.h"
 #include <algorithm>

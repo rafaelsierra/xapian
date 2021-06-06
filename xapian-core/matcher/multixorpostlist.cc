@@ -1,4 +1,4 @@
-/** @file multixorpostlist.cc
+/** @file
  * @brief N-way XOR postlist
  */
 /* Copyright (C) 2007,2009,2010,2011,2012,2016,2017 Olly Betts
@@ -154,7 +154,11 @@ MultiXorPostList::get_termfreq_est_using_stats(
 	rtf_scale = 1.0 / stats.rset_size;
     }
     double Pr_est = freqs.reltermfreq * rtf_scale;
-    double cf_scale = 1.0 / stats.total_term_count;
+    // If total_length is 0, cf must always be 0 so cf_scale is irrelevant.
+    double cf_scale = 0.0;
+    if (usual(stats.total_length != 0)) {
+	cf_scale = 1.0 / stats.total_length;
+    }
     double Pc_est = freqs.collfreq * cf_scale;
 
     for (size_t i = 1; i < n_kids; ++i) {
@@ -172,7 +176,7 @@ MultiXorPostList::get_termfreq_est_using_stats(
     }
     RETURN(TermFreqs(Xapian::doccount(P_est * stats.collection_size + 0.5),
 		     Xapian::doccount(Pr_est * stats.rset_size + 0.5),
-		     Xapian::termcount(Pc_est * stats.total_term_count + 0.5)));
+		     Xapian::termcount(Pc_est * stats.total_length + 0.5)));
 }
 
 Xapian::docid
@@ -183,13 +187,14 @@ MultiXorPostList::get_docid() const
 
 double
 MultiXorPostList::get_weight(Xapian::termcount doclen,
-			     Xapian::termcount unique_terms) const
+			     Xapian::termcount unique_terms,
+			     Xapian::termcount wdfdocmax) const
 {
     Assert(did);
     double result = 0;
     for (size_t i = 0; i < n_kids; ++i) {
 	if (plist[i]->get_docid() == did)
-	    result += plist[i]->get_weight(doclen, unique_terms);
+	    result += plist[i]->get_weight(doclen, unique_terms, wdfdocmax);
     }
     return result;
 }

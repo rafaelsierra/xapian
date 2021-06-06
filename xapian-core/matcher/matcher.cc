@@ -1,7 +1,7 @@
-/** @file matcher.cc
+/** @file
  * @brief Matcher class
  */
-/* Copyright (C) 2006,2008,2009,2010,2011,2017,2018,2019 Olly Betts
+/* Copyright (C) 2006,2008,2009,2010,2011,2017,2018,2019,2020 Olly Betts
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -181,7 +181,6 @@ Matcher::Matcher(const Xapian::Database& db_,
 		 const Xapian::RSet* rset,
 		 Xapian::Weight::Internal& stats,
 		 const Xapian::Weight& wtscheme,
-		 bool have_sorter,
 		 bool have_mdecider,
 		 Xapian::valueno collapse_key,
 		 Xapian::doccount collapse_max,
@@ -206,7 +205,7 @@ Matcher::Matcher(const Xapian::Database& db_,
 	subrsets.resize(n_shards);
     }
 
-    for (size_t i = 0; i != n_shards; ++i) {
+    for (Xapian::doccount i = 0; i != n_shards; ++i) {
 	const Xapian::Database::Internal *subdb = db.internal.get();
 	if (n_shards > 1) {
 	    auto multidb = static_cast<const MultiDatabase*>(subdb);
@@ -216,10 +215,6 @@ Matcher::Matcher(const Xapian::Database& db_,
 #ifdef XAPIAN_HAS_REMOTE_BACKEND
 	if (subdb->get_backend_info(NULL) == BACKEND_REMOTE) {
 	    auto as_rem = static_cast<const RemoteDatabase*>(subdb);
-	    if (have_sorter) {
-		unimplemented("Xapian::KeyMaker not supported by the remote "
-			      "backend");
-	    }
 	    if (have_mdecider) {
 		unimplemented("Xapian::MatchDecider not supported by the "
 			      "remote backend");
@@ -237,7 +232,6 @@ Matcher::Matcher(const Xapian::Database& db_,
 	}
 #else
 	// Avoid unused parameter warnings.
-	(void)have_sorter;
 	(void)have_mdecider;
 	(void)collapse_key;
 	(void)collapse_max;
@@ -254,8 +248,7 @@ Matcher::Matcher(const Xapian::Database& db_,
 	    locals.resize(i);
 	locals.emplace_back(new LocalSubMatch(subdb, query, query_length,
 					      wtscheme,
-					      i,
-					      db.has_positions()));
+					      i));
 	subdb->readahead_for_query(query);
     }
 
@@ -303,7 +296,7 @@ Matcher::Matcher(const Xapian::Database& db_,
 
     if (!locals.empty()) {
 	// Prepare local matches.
-	for (size_t i = 0; i != n_shards; ++i) {
+	for (Xapian::doccount i = 0; i != n_shards; ++i) {
 	    auto submatch = locals[i].get();
 	    if (submatch) {
 		submatch->prepare_match(subrsets[i], stats);
@@ -350,34 +343,40 @@ Matcher::get_local_mset(Xapian::doccount first,
     postlists.reserve(locals.size());
     PostListTree pltree(vsdoc, db, wtscheme);
     Xapian::termcount total_subqs = 0;
-    bool all_null = true;
-    for (size_t i = 0; i != locals.size(); ++i) {
-	if (!locals[i].get()) {
-	    postlists.push_back(NULL);
-	    continue;
-	}
-	// Pick the highest total subqueries answer amongst the subdatabases,
-	// as the query to postlist conversion doesn't recurse into positional
-	// queries for shards that don't have positional data when at least one
-	// other shard does.
-	Xapian::termcount total_subqs_i = 0;
-	PostList* pl = locals[i]->get_postlist(&pltree, &total_subqs_i);
-	total_subqs = max(total_subqs, total_subqs_i);
-	if (pl != NULL) {
-	    all_null = false;
-	    if (mdecider) {
-		pl = new DeciderPostList(pl, mdecider, &vsdoc, &pltree);
+    try {
+	bool all_null = true;
+	for (size_t i = 0; i != locals.size(); ++i) {
+	    if (!locals[i].get()) {
+		postlists.push_back(NULL);
+		continue;
 	    }
+	    // Pick the highest total subqueries answer amongst the
+	    // subdatabases, as the query to postlist conversion doesn't
+	    // recurse into positional queries for shards that don't have
+	    // positional data when at least one other shard does.
+	    Xapian::termcount total_subqs_i = 0;
+	    PostList* pl = locals[i]->get_postlist(&pltree, &total_subqs_i);
+	    total_subqs = max(total_subqs, total_subqs_i);
+	    if (pl != NULL) {
+		all_null = false;
+		if (mdecider) {
+		    pl = new DeciderPostList(pl, mdecider, &vsdoc, &pltree);
+		}
+	    }
+	    postlists.push_back(pl);
 	}
-	postlists.push_back(pl);
-    }
-    Assert(!postlists.empty());
+	Assert(!postlists.empty());
 
-    if (all_null) {
-	vector<Result> dummy;
-	return Xapian::MSet(new Xapian::MSet::Internal(first, 0, 0, 0, 0, 0, 0,
-						       0.0, 0.0,
-						       std::move(dummy), 0));
+	if (all_null) {
+	    vector<Result> dummy;
+	    return Xapian::MSet(new Xapian::MSet::Internal(first, 0, 0, 0, 0,
+							   0, 0, 0.0, 0.0,
+							   std::move(dummy),
+							   0));
+	}
+    } catch (...) {
+	for (auto pl : postlists) delete pl;
+	throw;
     }
 
     Xapian::doccount n_shards = postlists.size();
@@ -540,7 +539,8 @@ Matcher::get_mset(Xapian::doccount first,
     if (locals.empty() && remotes.size() == 1) {
 	// Short cut for a single remote database.
 	Assert(remotes[0].get());
-	remotes[0]->start_match(first, maxitems, check_at_least, stats);
+	remotes[0]->start_match(first, maxitems, check_at_least, sorter,
+				stats);
 	return remotes[0]->get_mset(matchspies);
     }
 #endif
@@ -554,10 +554,19 @@ Matcher::get_mset(Xapian::doccount first,
 
 #ifdef XAPIAN_HAS_REMOTE_BACKEND
     for (auto&& submatch : remotes) {
+	Assert(submatch.get());
 	// We need to fetch the first "first" results too, as merging may push
 	// those down into the part of the merged MSet we care about.
-	if (submatch.get())
-	    submatch->start_match(0, first + maxitems, check_at_least, stats);
+	Xapian::doccount remote_maxitems = first + maxitems;
+	if (collapse_max != 0) {
+	    // If collapsing we need to fetch all check_at_least items in order
+	    // to satisfy the requirement that if there are <= check_at_least
+	    // results then then estimated number of matches is exact.
+	    AssertRel(check_at_least, >=, first + maxitems);
+	    remote_maxitems = check_at_least;
+	}
+	submatch->start_match(0, remote_maxitems, check_at_least, sorter,
+			      stats);
     }
 #endif
 
@@ -568,15 +577,32 @@ Matcher::get_mset(Xapian::doccount first,
 		submatch->start_match(stats);
 	}
 
+	Xapian::doccount local_first = first;
+	Xapian::doccount local_maxitems = maxitems;
+	double local_percent_threshold_factor = percent_threshold_factor;
 #ifdef XAPIAN_HAS_REMOTE_BACKEND
-	double ptf_to_use = remotes.empty() ? percent_threshold_factor : 0;
-#else
-	double ptf_to_use = percent_threshold_factor;
+	if (!remotes.empty()) {
+	    // We need to fetch the first "first" results too, as merging may
+	    // push those down into the part of the merged MSet we care about.
+	    local_first = 0;
+	    local_maxitems = first + maxitems;
+	    if (collapse_max != 0) {
+		// If collapsing we need to fetch all check_at_least items in
+		// order to satisfy the requirement that if there are <=
+		// check_at_least results then then estimated number of matches
+		// is exact.  FIXME: Can we avoid this for the local shard by
+		// making use of information in the Collapser?
+		AssertRel(check_at_least, >=, first + maxitems);
+		local_maxitems = check_at_least;
+	    }
+	    local_percent_threshold_factor = 0.0;
+	}
 #endif
-	local_mset = get_local_mset(first, maxitems, check_at_least,
+	local_mset = get_local_mset(local_first, local_maxitems, check_at_least,
 				    wtscheme, mdecider,
 				    sorter, collapse_key, collapse_max,
-				    percent_threshold, ptf_to_use,
+				    percent_threshold,
+				    local_percent_threshold_factor,
 				    weight_threshold, order, sort_key, sort_by,
 				    sort_val_reverse, time_limit, matchspies);
     }
@@ -592,16 +618,17 @@ Matcher::get_mset(Xapian::doccount first,
     // than we need.
     vector<pair<Xapian::MSet, Xapian::doccount>> msets;
     Xapian::MSet merged_mset;
-    if (!locals.empty()) {
-	if (!local_mset.empty())
-	    msets.push_back({local_mset, 0});
-	merged_mset.internal->merge_stats(local_mset.internal.get());
-    }
-
     for_all_remotes(
 	[&](RemoteSubMatch* submatch) {
 	    Xapian::MSet remote_mset = submatch->get_mset(matchspies);
-	    merged_mset.internal->merge_stats(remote_mset.internal.get());
+	    merged_mset.internal->merge_stats(remote_mset.internal.get(),
+					      collapse_max != 0);
+	    auto& merged_stats = merged_mset.internal->stats;
+	    if (!merged_stats.get()) {
+		merged_stats = std::move(remote_mset.internal->stats);
+	    } else {
+		merged_stats->merge(*(remote_mset.internal->stats));
+	    }
 	    if (remote_mset.empty()) {
 		return;
 	    }
@@ -609,6 +636,14 @@ Matcher::get_mset(Xapian::doccount first,
 						 db.internal->size());
 	    msets.push_back({remote_mset, 0});
 	});
+
+    if (!locals.empty()) {
+	if (!local_mset.empty())
+	    msets.push_back({local_mset, 0});
+	merged_mset.internal->merge_stats(local_mset.internal.get(),
+					  collapse_max != 0);
+	merged_mset.internal->stats->merge(stats);
+    }
 
     if (merged_mset.internal->max_possible == 0.0) {
 	// All the weights are zero.
@@ -644,40 +679,84 @@ Matcher::get_mset(Xapian::doccount first,
 
     CollapserLite collapser(collapse_max);
     merged_mset.internal->first = first;
-    while (merged_mset.size() != maxitems) {
+    while (!msets.empty() && merged_mset.size() != maxitems) {
 	auto& front = msets.front();
 	auto& result = front.first.internal->items[front.second];
 	if (percent_threshold) {
 	    if (result.get_weight() < min_weight) {
+		// FIXME: This will need adjusting if we ever support
+		// percentage thresholds when sorting primarily by value.
 		break;
 	    }
 	}
-	if (collapser) {
-	    if (!collapser.add(result.get_collapse_key()))
-		continue;
+	if (!collapser || collapser.add(result.get_collapse_key())) {
+	    if (first) {
+		// Skip the first "first" results from the merge - we had to
+		// also fetch the first "first" results from each shard, as
+		// merging may push those down into the part of the merged MSet
+		// we care about.
+		--first;
+	    } else {
+		merged_mset.internal->items.push_back(std::move(result));
+	    }
 	}
-	if (first) {
-	    --first;
-	} else {
-	    merged_mset.internal->items.push_back(std::move(result));
-	}
-	auto n = msets.front().second + 1;
-	if (n == msets.front().first.size()) {
+	auto n = front.second + 1;
+	if (n == front.first.size()) {
 	    Heap::pop(msets.begin(), msets.end(), heap_cmp);
 	    msets.resize(msets.size() - 1);
-	    if (msets.empty())
-		break;
 	} else {
-	    msets.front().second = n;
+	    front.second = n;
 	    Heap::replace(msets.begin(), msets.end(), heap_cmp);
 	}
     }
 
     if (collapser) {
-	collapser.finalise(merged_mset.internal->items, percent_threshold);
+	auto todo = check_at_least - maxitems;
+	if (merged_mset.size() != maxitems) {
+	    todo = 0;
+	}
+	while (!msets.empty() && todo--) {
+	    auto& front = msets.front();
+	    auto& result = front.first.internal->items[front.second];
+	    if (percent_threshold) {
+		if (result.get_weight() < min_weight) {
+		    // FIXME: This will need adjusting if we ever support
+		    // percentage thresholds when sorting primarily by value.
+		    break;
+		}
+	    }
+	    (void)collapser.add(result.get_collapse_key());
+	    auto n = front.second + 1;
+	    if (n == front.first.size()) {
+		Heap::pop(msets.begin(), msets.end(), heap_cmp);
+		msets.resize(msets.size() - 1);
+	    } else {
+		front.second = n;
+		Heap::replace(msets.begin(), msets.end(), heap_cmp);
+	    }
+	}
 
 	auto mseti = merged_mset.internal;
-	mseti->matches_lower_bound = collapser.get_matches_lower_bound();
+	collapser.finalise(mseti->items, percent_threshold);
+
+	if (check_at_least > 0) {
+	    // Each input MSet object to the merge has already been collapsed
+	    // and merge_stats() above will have set mset->matches_lower_bound
+	    // to the maximum matches_lower_bound of any input, which provides
+	    // a lower bound.
+	    //
+	    // In some cases, the collapser can provide a better lower bound.
+	    auto collapser_lb = collapser.get_matches_lower_bound();
+	    if (mseti->matches_upper_bound <= check_at_least) {
+		mseti->matches_lower_bound = collapser_lb;
+		mseti->matches_estimated = collapser_lb;
+		mseti->matches_upper_bound = collapser_lb;
+		return merged_mset;
+	    }
+
+	    mseti->matches_lower_bound = max(mseti->matches_lower_bound,
+					     collapser_lb);
+	}
 
 	double unique_rate = 1.0;
 
@@ -685,21 +764,22 @@ Matcher::get_mset(Xapian::doccount first,
 	Xapian::doccount dups_ignored = collapser.get_dups_ignored();
 	if (docs_considered > 0) {
 	    // Scale the estimate by the rate at which we've been finding
-	    // unique documents.
+	    // unique documents while merging MSet objects.
 	    double unique = double(docs_considered - dups_ignored);
 	    unique_rate = unique / double(docs_considered);
 	}
 
 	// We can safely reduce the upper bound by the number of duplicates
-	// we've ignored.
+	// we've seen while merging MSet objects.
 	mseti->matches_upper_bound -= collapser.get_dups_ignored();
 
 	double estimate_scale = unique_rate;
 
 	if (estimate_scale != 1.0) {
-	    auto matches_estimated = mseti->matches_estimated;
-	    mseti->matches_estimated =
-		Xapian::doccount(matches_estimated * estimate_scale + 0.5);
+	    auto l = mseti->matches_lower_bound;
+	    auto u = mseti->matches_upper_bound;
+	    auto e = l + Xapian::doccount((u - l) * estimate_scale + 0.5);
+	    mseti->matches_estimated = e;
 	}
 
 	// Clamp the estimate the range given by the bounds.

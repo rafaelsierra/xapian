@@ -1,4 +1,4 @@
-/** @file rset.cc
+/** @file
  * @brief Set of documents judged as relevant
  */
 /* Copyright (C) 2017 Olly Betts
@@ -67,7 +67,8 @@ RSet::remove_document(Xapian::docid did)
     if (rare(did == 0))
 	throw Xapian::InvalidArgumentError("Docid 0 not valid in an RSet");
     if (internal.get())
-	internal->docs.erase(did); }
+	internal->docs.erase(did);
+}
 
 bool
 RSet::contains(Xapian::docid did) const

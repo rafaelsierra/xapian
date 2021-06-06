@@ -1,4 +1,4 @@
-/** @file honey_defs.h
+/** @file
  * @brief Definitions, types, etc for use inside honey.
  */
 /* Copyright (C) 2010,2014,2015,2017,2018 Olly Betts
@@ -37,6 +37,14 @@
 
 /// Maximum key length.
 #define HONEY_MAX_KEY_LENGTH 255
+
+/** Maximum size of a postlist chunk in bytes.
+ *
+ *  This isn't a hard maximum, but we won't exceed it by much.
+ *
+ *  FIXME: 2000 is what glass uses, but we should probably tune this.
+ */
+#define HONEY_POSTLIST_CHUNK_MAX 2000
 
 // Maximum size of a document length chunk in bytes.
 #define HONEY_DOCLEN_CHUNK_MAX 2017

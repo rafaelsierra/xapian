@@ -1,4 +1,4 @@
-/** @file backendmanager.h
+/** @file
  * @brief Base class for backend handling in test harness
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -105,6 +105,9 @@ class BackendManager {
 					      const std::string &),
 				  const std::string &arg);
 
+    /// Get a database instance by path
+    virtual Xapian::Database get_database_by_path(const std::string& path);
+
     /// Get the path of a database instance, if such a thing exists.
     std::string get_database_path(const std::vector<std::string> &files);
 
@@ -120,14 +123,31 @@ class BackendManager {
     /// Get a writable database instance.
     virtual Xapian::WritableDatabase get_writable_database(const std::string & name, const std::string & file);
 
+    /// Get a remote Xapian::WritableDatabase instance with specified args.
+    virtual Xapian::WritableDatabase
+    get_remote_writable_database(std::string args);
+
     /// Get the path of a writable database instance, if such a thing exists.
     virtual std::string get_writable_database_path(const std::string & name);
+
+    /// Get a generated writable database instance
+    virtual Xapian::WritableDatabase
+    get_generated_database(const std::string& name);
 
     /// Get the path to use for generating a database, if supported.
     virtual std::string get_generated_database_path(const std::string & name);
 
+    /// Finalise the generated database
+    virtual void finalise_generated_database(const std::string& name);
+
     /// Get a remote database instance with the specified timeout.
     virtual Xapian::Database get_remote_database(const std::vector<std::string> & files, unsigned int timeout);
+
+    /** Get the args for opening a writable remote database with the
+     *  specified timeout.
+     */
+    virtual std::string get_writable_database_args(const std::string& path,
+						   unsigned int timeout);
 
     /// Create a Database object for the last opened WritableDatabase.
     virtual Xapian::Database get_writable_database_as_database();

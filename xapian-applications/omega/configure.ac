@@ -234,9 +234,9 @@ AM_CONDITIONAL(NEED_STRPTIME, [test yes != "$ac_cv_func_strptime"])
 
 AC_CHECK_FUNCS([posix_fadvise])
 
-dnl omindex uses fork(), socketpair(), and setrlimit() to impose resource
-dnl limits on filter programs.
-AC_CHECK_FUNCS([mmap fork setrlimit sysmp pstat_getdynamic setpgid sigaction])
+dnl omindex uses fork(), socketpair(), setrlimit() and alarm() to impose resource
+dnl limits on filter programs and workers.
+AC_CHECK_FUNCS([mmap fork setrlimit sysmp pstat_getdynamic setpgid sigaction alarm])
 
 dnl -lxnet is needed on Solaris and apparently on HP-UX too.
 AC_SEARCH_LIBS([socketpair], [xnet],
@@ -246,74 +246,91 @@ AC_SEARCH_LIBS([socketpair], [xnet],
 dnl fnmatch() is used to match ignore pattern.
 AC_CHECK_FUNCS([fnmatch])
 
-dnl Check that snprintf actually works as it's meant to.
-dnl
-dnl Linux 'man snprintf' warns:
-dnl  Linux libc4.[45] does not have a snprintf, but provides a libbsd that
-dnl  contains an snprintf equivalent to sprintf, i.e., one that ignores the
-dnl  size argument.  Thus, the use of snprintf with early libc4 leads to
-dnl  serious security problems.
-dnl
-dnl It also warns that glibc < 2.0.6 (and presumably other pre-C99
-dnl implementations) return -1 when truncating so check that we get the
-dnl ISO C99 semantics for the returned length when truncating.  If we
-dnl have a working snprintf but with non-ISO return semantics, handle
-dnl that case separately as it may still be useful in many cases.
-dnl
+OMINDEX_MODULES=""
+
+dnl check if poppler is available.
+PKG_CHECK_MODULES([POPPLER], [poppler-cpp], [
+    save_LIBS=$LIBS
+    LIBS="$LIBS $POPPLER_LIBS"
+    AC_LINK_IFELSE([#include <poppler/cpp/poppler-version.h>
+		    int main(){
+			poppler::version_string();
+			return 0;
+		    }],
+		   [AC_DEFINE(HAVE_POPPLER, 1, [Define HAVE_POPPLER if the library is available])
+		    OMINDEX_MODULES="$OMINDEX_MODULES omindex_poppler"])
+    LIBS=$save_LIBS],[ ])
+
+dnl check if libe-book is available.
+PKG_CHECK_MODULES([LIBEBOOK], [libe-book-0.1,librevenge-0.0,librevenge-generators-0.0,librevenge-stream-0.0], [
+    AC_DEFINE(HAVE_LIBEBOOK, 1, [Define HAVE_LIBEBOOK if the library is available])
+    OMINDEX_MODULES="$OMINDEX_MODULES omindex_libebook"],[ ])
+
+dnl check if libetonyek is available.
+PKG_CHECK_MODULES([LIBETONYEK], [libetonyek-0.1,librevenge-0.0,librevenge-generators-0.0,librevenge-stream-0.0], [
+    AC_DEFINE(HAVE_LIBETONYEK, 1, [Define HAVE_LIBETONYEK if the library is available])
+    OMINDEX_MODULES="$OMINDEX_MODULES omindex_libetonyek"],[ ])
+
+dnl check if libtesseract is available.
+PKG_CHECK_MODULES([TESSERACT], [tesseract, lept], [
+    AC_DEFINE(HAVE_TESSERACT, 1, [Define HAVE_TESSERACT if the library is available])
+    OMINDEX_MODULES="$OMINDEX_MODULES omindex_tesseract"],[ ])
+
+dnl check if gmime is available.
+PKG_CHECK_MODULES([GMIME], [gmime-2.6, glib-2.0], [
+    AC_DEFINE(HAVE_GMIME, 1, [Define HAVE_GMIME if the library is available])
+    OMINDEX_MODULES="$OMINDEX_MODULES omindex_gmime"],[ ])
+
+dnl check if libarchive is available.
+PKG_CHECK_MODULES([LIBARCHIVE], [libarchive], [
+    AC_DEFINE(HAVE_LIBARCHIVE, 1, [Define HAVE_LIBARCHIVE if the library is available])
+    OMINDEX_MODULES="$OMINDEX_MODULES omindex_libarchive"],[ ])
+
+dnl check if libabw is available.
+PKG_CHECK_MODULES([LIBABW], [libabw-0.1,librevenge-0.0,librevenge-generators-0.0,librevenge-stream-0.0], [
+    AC_DEFINE(HAVE_LIBABW, 1, [Define HAVE_LIBABW if the library is available])
+    OMINDEX_MODULES="$OMINDEX_MODULES omindex_libabw"],[ ])
+
+dnl check if libcdr is available.
+PKG_CHECK_MODULES([LIBCDR], [libcdr-0.1,librevenge-0.0,librevenge-generators-0.0,librevenge-stream-0.0], [
+    AC_DEFINE(HAVE_LIBCDR, 1, [Define HAVE_LIBCDR if the library is available])
+    OMINDEX_MODULES="$OMINDEX_MODULES omindex_libcdr"],[ ])
+
+dnl check if libextractor is available.
+PKG_CHECK_MODULES([LIBEXTRACTOR], [libextractor], [
+    AC_DEFINE(HAVE_LIBEXTRACTOR, 1, [Define HAVE_LIBEXTRACTOR if the library is available])
+    OMINDEX_MODULES="$OMINDEX_MODULES omindex_libextractor"],[ ])
+
+AC_SUBST([OMINDEX_MODULES])
+
 dnl mingw has _snprintf so check for that too.
-AC_MSG_CHECKING([for working ISO C99 conforming snprintf])
-ac_cv_func_snprintf_noniso=no
-for func in snprintf _snprintf ; do
-  AC_RUN_IFELSE([
-    AC_LANG_PROGRAM(
-      [[
+AC_MSG_CHECKING([for  snprintf])
+AC_CACHE_VAL([xo_cv_func_snprintf],
+  [
+  xo_cv_func_snprintf=no
+  for func in snprintf _snprintf ; do
+    AC_COMPILE_IFELSE([
+      AC_LANG_PROGRAM(
+	[[
 #include <cstdio>
-#include <cstring>
 using namespace std;
-      ]],
-      dnl Return different exit status for each error so we can see which
-      dnl check failed by consulting config.log.
-      [[
-	char buffer[4] = "abc";
-	int res1 = $func(buffer, 2, "%s", "XYZ");
-	if (memcmp(buffer, "X\0c", 4) != 0) return 2;
-	int res2 = $func(buffer, 2, "%x", 0x12);
-	if (memcmp(buffer, "1\0c", 4) != 0) return 3;
-	if (res1 == -1 && res2 == -1) return 15; /* Pre-ISO semantics. */
-	if (res1 != 3) return 4;
-	if (res2 != 2) return 5;
-      ]]
-    )],
-    [ac_cv_func_snprintf=$func;break],
-    [
-    if test 15no = "$?$ac_cv_func_snprintf_noniso" ; then
-      ac_cv_func_snprintf_noniso=$func
-    fi
-    ac_cv_func_snprintf=no
-    ],
-    [ac_cv_func_snprintf=unknown;break]
-  )
-done
-AC_MSG_RESULT([$ac_cv_func_snprintf])
-case $ac_cv_func_snprintf in
-  no)
-    AC_MSG_CHECKING([for working non-ISO C99 conforming snprintf])
-    AC_MSG_RESULT([$ac_cv_func_snprintf_noniso])
-    if test no != "$ac_cv_func_snprintf_noniso" ; then
-      AC_DEFINE_UNQUOTED([SNPRINTF], [$ac_cv_func_snprintf_noniso],
-	[Define to the name of a function implementing snprintf but not caring about ISO C99 return value semantics (if one exists)])
-    fi
-    ;;
-  unknown)
-    dnl be conservative when crosscompiling
-    ;;
-  *)
-    AC_DEFINE_UNQUOTED([SNPRINTF_ISO], [$ac_cv_func_snprintf],
-       [Define to the name of a function implementing snprintf with ISO C99 semantics (if one exists)])
-    AC_DEFINE_UNQUOTED([SNPRINTF], [$ac_cv_func_snprintf],
-       [Define to the name of a function implementing snprintf but not caring about ISO C99 return value semantics (if one exists)])
-    ;;
-esac
+	]],
+	[[
+	  char buffer[4] = "abc";
+	  int res = $func(buffer, 4, "%s", "XYZ");
+	  return res;
+	]]
+      )],
+      [xo_cv_func_snprintf=$func;break],
+      []
+    )
+  done
+  ])
+AC_MSG_RESULT([$xo_cv_func_snprintf])
+if test "$xo_cv_func_snprintf" != no ; then
+  AC_DEFINE_UNQUOTED([SNPRINTF], [$xo_cv_func_snprintf],
+    [Define to the name of a function implementing snprintf but not caring about ISO C99 return value semantics (if one exists)])
+fi
 
 AC_CHECK_MEMBERS([struct tm.tm_gmtoff], [], [], [#include <time.h>])
 
@@ -342,16 +359,19 @@ dnl Check for perl.  Needed for outlookmsg2html script.
 dnl (And in maintainer-mode, also to make man pages from "--help" output, and
 dnl to make the omegascript vim syntax mode.)
 AC_PATH_PROG(PERL, perl, [])
+AC_ARG_VAR([PERL], [Perl interpreter])
 test -z "$PERL" && AC_MSG_ERROR([perl is required])
 
 if test x"$enable_documentation" = xyes; then
   dnl Check for help2man. (Needed to make man pages from "--help" output).
   AC_PATH_PROG(HELP2MAN, help2man, [])
+  AC_ARG_VAR([HELP2MAN], [help2man man page generator])
   test -z "$HELP2MAN" && AC_MSG_ERROR([help2man is required to build documentation])
 
   dnl Check for rst2html. (Needed to make HTML from reStructuredText format)
   dnl Also look for rst2html.py, which archlinux reportedly installs it as.
   AC_PATH_PROGS(RST2HTML, [rst2html rst2html.py], [])
+  AC_ARG_VAR([RST2HTML], [reST to HTML convertor])
   test -z "$RST2HTML" && AC_MSG_ERROR([rst2html is required to build documentation])
 fi
 
@@ -446,21 +466,10 @@ if test yes = "$GXX"; then
       dnl
       dnl -Wdouble-promotion was added in GCC 4.6.
       dnl
-      dnl -Winit-self was added in GCC 3.4, but for GCC < 4.7 g++ always
-      dnl warns for this case with -Wuninitialized (implied by -W).  We
-      dnl don't intend to use this idiom, so any instances are bugs we'd
-      dnl like to know about.
-      dnl
       dnl All the other options were supported by g++ 2.95.
-      AM_CXXFLAGS="$AM_CXXFLAGS -Wall -W -Wredundant-decls -Wpointer-arith -Wcast-qual -Wcast-align -Wformat-security -fno-gnu-keywords -Wundef -Woverloaded-virtual -Wstrict-null-sentinel -Wshadow -Wstrict-overflow=1 -Wlogical-op -Wmissing-declarations -Wdouble-promotion -Winit-self"
+      AM_CXXFLAGS="$AM_CXXFLAGS -Wall -W -Wredundant-decls -Wpointer-arith -Wcast-qual -Wcast-align -Wformat-security -fno-gnu-keywords -Wundef -Woverloaded-virtual -Wstrict-null-sentinel -Wshadow -Wstrict-overflow=1 -Wlogical-op -Wmissing-declarations -Wdouble-promotion"
 
       dnl FIXME:
-      dnl -Wconversion in older GCC versions is intended to help migration
-      dnl from K&R to ISO C, and isn't useful for us.  In 4.3 it was renamed
-      dnl to -Wtraditional-conversion and a new -Wconversion added which
-      dnl sounds useful but is a bit buggy currently.  So we should consider
-      dnl enabling -Wconversion once it is stabilised (GCC 4.4 or ...)
-      dnl
       dnl -Wold-style-cast is interesting, but triggers for macros from
       dnl system headers (e.g. FD_SET).  GCC 4.8 improved this by making
       dnl -ftrack-macro-expansion=2 the default, but we still see such
@@ -535,16 +544,24 @@ AH_BOTTOM(
 # pragma warning(disable:4800)
 #endif
 
-/* _FORTIFY_SOURCE is only supported by GCC >= 4.1 and glibc >= 2.3.4, but it
- * shouldn't cause a problem to define it where it's not supported and some
- * distros may have backported support, so hardcoding version checks is
- * counter-productive.
+/* Default to enabling _FORTIFY_SOURCE at level 2.  It shouldn't cause a
+ * problem to define it where it's not supported.
  *
  * Check if _FORTIFY_SOURCE is already defined to allow the user to override
  * our choice with "./configure CPPFLAGS=-D_FORTIFY_SOURCE=0" or "...=1".
  */
 #if defined __GNUC__ && !defined _FORTIFY_SOURCE
 # define _FORTIFY_SOURCE 2
+# ifdef __MINGW32__
+/* Both mingw32 and mingw-w64 define __MINGW32__. */
+#  include <stddef.h>
+#  ifdef __MINGW64_VERSION_MAJOR
+/* Enabling _FORTIFY_SOURCE on newer mingw-w64 requires linking with -lssp so
+ * we simply don't automatically enable it there.
+ */
+#   undef _FORTIFY_SOURCE
+#  endif
+# endif
 #endif
 
 /* For GCC >= 3.0 (and Intel's C++ compiler, which also defines __GNUC__),

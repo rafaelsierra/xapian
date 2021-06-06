@@ -1,4 +1,4 @@
-/** @file glass_spellingwordslist.cc
+/** @file
  * @brief Iterator for the spelling correction words in a glass database.
  */
 /* Copyright (C) 2004,2005,2006,2007,2008,2009,2017 Olly Betts
@@ -72,12 +72,6 @@ GlassSpellingWordsList::get_termfreq() const
 	throw Xapian::DatabaseCorruptError("Bad spelling word freq");
     }
     RETURN(freq);
-}
-
-Xapian::termcount
-GlassSpellingWordsList::get_collection_freq() const
-{
-    throw Xapian::InvalidOperationError("GlassSpellingWordsList::get_collection_freq() not meaningful");
 }
 
 TermList *

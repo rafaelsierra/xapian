@@ -1,4 +1,4 @@
-/** @file backendmanager.cc
+/** @file
  * @brief manage backends for testsuite
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -133,7 +133,7 @@ BackendManager::get_database(const std::string &dbname,
 
     if (path_exists(path)) {
 	try {
-	    return Xapian::Database(path);
+	    return get_database_by_path(path);
 	} catch (const Xapian::DatabaseOpeningError &) {
 	}
     }
@@ -145,15 +145,15 @@ BackendManager::get_database(const std::string &dbname,
     tmp_path += '~';
 
     {
-	Xapian::WritableDatabase wdb = get_writable_database(tmp_dbleaf,
-							     string());
+	Xapian::WritableDatabase wdb = get_generated_database(tmp_dbleaf);
 	gen(wdb, arg);
     }
+    finalise_generated_database(tmp_dbleaf);
     rename(tmp_path.c_str(), path.c_str());
     // For multi, the shards will use the temporary name, but that's not really
     // a problem.
 
-    return Xapian::Database(path);
+    return get_database_by_path(path);
 }
 
 std::string
@@ -164,7 +164,7 @@ BackendManager::get_database_path(const std::string &dbname,
 {
     string dbleaf = "db__";
     dbleaf += dbname;
-    const string & path = get_generated_database_path(dbleaf);
+    const string& path = get_generated_database_path(dbleaf);
     if (path_exists(path)) {
 	try {
 	    (void)Xapian::Database(path);
@@ -180,13 +180,19 @@ BackendManager::get_database_path(const std::string &dbname,
     tmp_path += '~';
 
     {
-	Xapian::WritableDatabase wdb = get_writable_database(tmp_dbleaf,
-							     string());
+	Xapian::WritableDatabase wdb = get_generated_database(tmp_dbleaf);
 	gen(wdb, arg);
     }
+    finalise_generated_database(tmp_dbleaf);
     rename(tmp_path.c_str(), path.c_str());
 
     return path;
+}
+
+Xapian::Database
+BackendManager::get_database_by_path(const string& path)
+{
+    return Xapian::Database(path);
 }
 
 string
@@ -207,6 +213,16 @@ BackendManager::get_writable_database(const string &, const string &)
     invalid_operation("Attempted to open a disabled database");
 }
 
+Xapian::WritableDatabase
+BackendManager::get_remote_writable_database(string)
+{
+    string msg = "BackendManager::get_remote_writable_database() "
+		 "called for non-remote database (type is ";
+    msg += get_dbtype();
+    msg += ')';
+    throw Xapian::InvalidOperationError(msg);
+}
+
 string
 BackendManager::get_writable_database_path(const std::string &)
 {
@@ -219,6 +235,12 @@ BackendManager::get_compaction_output_path(const std::string&)
     invalid_operation("Compaction not supported for this database type");
 }
 
+Xapian::WritableDatabase
+BackendManager::get_generated_database(const std::string& name)
+{
+    return get_writable_database(name, string());
+}
+
 string
 BackendManager::get_generated_database_path(const std::string &)
 {
@@ -226,11 +248,26 @@ BackendManager::get_generated_database_path(const std::string &)
 		      "type");
 }
 
+void
+BackendManager::finalise_generated_database(const std::string&)
+{ }
+
 Xapian::Database
 BackendManager::get_remote_database(const vector<string> &, unsigned int)
 {
     string msg = "BackendManager::get_remote_database() called for non-remote "
 		 "database (type is ";
+    msg += get_dbtype();
+    msg += ')';
+    throw Xapian::InvalidOperationError(msg);
+}
+
+string
+BackendManager::get_writable_database_args(const std::string&,
+					   unsigned int)
+{
+    string msg = "BackendManager::get_writable_database_args() "
+		 "called for non-remote database (type is ";
     msg += get_dbtype();
     msg += ')';
     throw Xapian::InvalidOperationError(msg);

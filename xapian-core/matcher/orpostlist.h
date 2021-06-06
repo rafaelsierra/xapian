@@ -1,4 +1,4 @@
-/** @file orpostlist.h
+/** @file
  * @brief PostList class implementing Query::OP_OR
  */
 /* Copyright 2017 Olly Betts
@@ -21,7 +21,7 @@
 #ifndef XAPIAN_INCLUDED_ORPOSTLIST_H
 #define XAPIAN_INCLUDED_ORPOSTLIST_H
 
-#include "api/postlist.h"
+#include "backends/postlist.h"
 
 class PostListTree;
 
@@ -90,7 +90,8 @@ class OrPostList : public PostList {
     Xapian::docid get_docid() const;
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
 
     bool at_end() const;
 

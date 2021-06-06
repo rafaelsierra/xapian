@@ -1,4 +1,4 @@
-/** @file contiguousalldocspostlist.h
+/** @file
  * @brief Iterate all document ids when they form a contiguous range.
  */
 /* Copyright (C) 2007,2008,2009,2011,2017 Olly Betts
@@ -24,7 +24,7 @@
 
 #include <string>
 
-#include "api/leafpostlist.h"
+#include "leafpostlist.h"
 
 /// A PostList iterating all docids when they form a contiguous range.
 class ContiguousAllDocsPostList : public LeafPostList {

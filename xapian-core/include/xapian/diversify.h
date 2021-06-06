@@ -1,4 +1,4 @@
-/** @file diversify.h
+/** @file
  *  @brief Diversification API
  */
 /* Copyright (C) 2018 Uppinder Chugh
@@ -23,7 +23,7 @@
 #define XAPIAN_INCLUDED_DIVERSIFY_H
 
 #if !defined XAPIAN_IN_XAPIAN_H && !defined XAPIAN_LIB_BUILD
-#error "Never use <xapian/diversify.h> directly; include <xapian.h> instead."
+#error Never use <xapian/diversify.h> directly; include <xapian.h> instead.
 #endif
 
 #include <xapian/attributes.h>
@@ -83,9 +83,9 @@ class XAPIAN_VISIBILITY_DEFAULT Diversify {
      *  @param  lambda_	Trade-off between relevance of top-k diversified
      *  		document set and its similarity to the rest of the
      *  		documents in the document match set. Belongs to the
-     *  		the range [0,1] with '0' meaning no weightage to
-     *  		relevance of the diversified document set and '1'
-     *  		allowing for full weightage to relevance of the
+     *  		range [0,1] with 0 meaning no weighting to
+     *  		relevance of the diversified document set and 1
+     *  		allowing for full weighting to relevance of the
      *  		diversified document set.
      *  @param  b_	Parameter for MPT, normally in the range [1,10]
      *  @param  sigma_sqr_	Parameter for MPT, normally in the range

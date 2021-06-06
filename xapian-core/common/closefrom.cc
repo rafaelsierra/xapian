@@ -1,7 +1,7 @@
-/** @file closefrom.cc
+/** @file
  * @brief Implementation of closefrom() function.
  */
-/* Copyright (C) 2010,2011,2012,2016,2018 Olly Betts
+/* Copyright (C) 2010,2011,2012,2016,2018,2019 Olly Betts
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,11 +37,11 @@
 #if defined __linux__
 # include "alignment_cast.h"
 # include "safedirent.h"
-# include <cstdlib>
+# include "parseint.h"
 #elif defined __APPLE__
 # include <sys/attr.h>
-# include <cstdlib>
 # include <cstring>
+# include "parseint.h"
 #endif
 
 using namespace std;
@@ -92,7 +92,7 @@ Xapian::Internal::closefrom(int fd)
     if (fcntl(fd, F_CLOSEM, 0) >= 0)
 	return;
 #elif defined HAVE_GETDIRENTRIES && defined __linux__
-    const char * path = "/proc/self/fd";
+    const char* path = "/proc/self/fd";
     int dir = open(path, O_RDONLY|O_DIRECTORY);
     if (dir >= 0) {
 	off_t base = 0;
@@ -111,15 +111,15 @@ Xapian::Internal::closefrom(int fd)
 		// Fallback if getdirentries() fails.
 		break;
 	    }
-	    struct dirent *d;
+	    struct dirent* d;
 	    for (ssize_t pos = 0; pos < c; pos += d->d_reclen) {
 		d = alignment_cast<struct dirent*>(buf + pos);
-		const char * leaf = d->d_name;
-		if (leaf[0] < '0' || leaf[0] > '9') {
+		const char* leaf = d->d_name;
+		int n;
+		if (!parse_signed(leaf, n)) {
 		    // Skip '.' and '..'.
 		    continue;
 		}
-		int n = atoi(leaf);
 		if (n < fd) {
 		    // FD below threshold.
 		    continue;
@@ -153,7 +153,7 @@ Xapian::Internal::closefrom(int fd)
 	close(dir);
     }
 #elif defined __APPLE__ // Mac OS X
-    const char * path = "/dev/fd";
+    const char* path = "/dev/fd";
 #ifdef __LP64__
     typedef unsigned int gdea_type;
 #else
@@ -183,16 +183,16 @@ Xapian::Internal::closefrom(int fd)
 		// Fallback if getdirentriesattr() fails.
 		break;
 	    }
-	    char * p = buf;
+	    char* p = buf;
 	    while (count-- > 0) {
-		const char * leaf = p + sizeof(u_int32_t);
+		const char* leaf = p + sizeof(u_int32_t);
 		p += *static_cast<u_int32_t*>(static_cast<void*>(p));
 
-		if (leaf[0] < '0' || leaf[0] > '9') {
+		int n;
+		if (!parse_signed(leaf, n)) {
 		    // Skip '.' and '..'.
 		    continue;
 		}
-		int n = atoi(leaf);
 		if (n < fd) {
 		    // FD below threshold.
 		    continue;

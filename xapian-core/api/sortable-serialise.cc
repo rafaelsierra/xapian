@@ -1,4 +1,4 @@
-/** @file sortable-serialise.cc
+/** @file
  * @brief Serialise floating point values to string which sort the same way.
  */
 /* Copyright (C) 2007,2009,2015,2016 Olly Betts
@@ -48,7 +48,7 @@ using namespace std;
 #endif
 
 size_t
-Xapian::sortable_serialise_(double value, char * buf) XAPIAN_NOEXCEPT
+Xapian::sortable_serialise_(double value, char* buf) noexcept
 {
     double mantissa;
     int exponent;
@@ -182,7 +182,7 @@ numfromstr(const std::string & str, std::string::size_type pos)
 }
 
 double
-Xapian::sortable_unserialise(const std::string & value) XAPIAN_NOEXCEPT
+Xapian::sortable_unserialise(const std::string& value) noexcept
 {
     // Zero.
     if (value.size() == 1 && value[0] == '\x80') return 0.0;

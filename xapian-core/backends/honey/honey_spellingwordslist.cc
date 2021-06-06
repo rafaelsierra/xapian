@@ -1,4 +1,4 @@
-/** @file honey_spellingwordslist.cc
+/** @file
  * @brief Iterator for the spelling correction words in a honey database.
  */
 /* Copyright (C) 2004,2005,2006,2007,2008,2009,2017,2018 Olly Betts
@@ -72,25 +72,17 @@ HoneySpellingWordsList::get_termfreq() const
     cursor->read_tag();
 
     Xapian::termcount freq;
-    const char *p = cursor->current_tag.data();
+    const char* p = cursor->current_tag.data();
     if (!unpack_uint_last(&p, p + cursor->current_tag.size(), &freq)) {
 	throw Xapian::DatabaseCorruptError("Bad spelling word freq");
     }
     RETURN(freq);
 }
 
-Xapian::termcount
-HoneySpellingWordsList::get_collection_freq() const
-{
-    throw Xapian::InvalidOperationError("HoneySpellingWordsList::"
-					"get_collection_freq() "
-					"not meaningful");
-}
-
-TermList *
+TermList*
 HoneySpellingWordsList::next()
 {
-    LOGCALL(DB, TermList *, "HoneySpellingWordsList::next", NO_ARGS);
+    LOGCALL(DB, TermList*, "HoneySpellingWordsList::next", NO_ARGS);
     Assert(cursor);
 
     if (cursor->after_end()) {
@@ -108,10 +100,10 @@ HoneySpellingWordsList::next()
     RETURN(NULL);
 }
 
-TermList *
-HoneySpellingWordsList::skip_to(const string &term)
+TermList*
+HoneySpellingWordsList::skip_to(const string& term)
 {
-    LOGCALL(DB, TermList *, "HoneySpellingWordsList::skip_to", term);
+    LOGCALL(DB, TermList*, "HoneySpellingWordsList::skip_to", term);
     Assert(cursor);
 
     if (!cursor->find_entry_ge(Honey::make_spelling_wordlist_key(term))) {

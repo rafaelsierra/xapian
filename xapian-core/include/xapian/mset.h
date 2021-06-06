@@ -1,4 +1,4 @@
-/** @file  mset.h
+/** @file
  *  @brief Class representing a list of search results
  */
 /* Copyright (C) 2015,2016,2017,2019 Olly Betts
@@ -23,7 +23,7 @@
 #define XAPIAN_INCLUDED_MSET_H
 
 #if !defined XAPIAN_IN_XAPIAN_H && !defined XAPIAN_LIB_BUILD
-# error "Never use <xapian/mset.h> directly; include <xapian.h> instead."
+# error Never use <xapian/mset.h> directly; include <xapian.h> instead.
 #endif
 
 #include <iterator>
@@ -169,7 +169,11 @@ class XAPIAN_VISIBILITY_DEFAULT MSet {
 
     /** Get the termfreq of a term.
      *
-     *  @return The number of documents @a term occurs in.
+     *  @return The number of documents which @a term occurs in.  This
+     *		considers all documents in the database being searched, so
+     *		gives the same answer as <code>db.get_termfreq(term)</code>
+     *		(but is more efficient for query terms as it returns a
+     *		value cached during the search.)
      *
      *  Since 1.5.0, this method returns 0 if called on an MSet which is
      *  not associated with a database (which is consistent with
@@ -312,7 +316,7 @@ class XAPIAN_VISIBILITY_DEFAULT MSet {
      *
      *  And @a flags contains flags controlling behaviour.
      *
-     *  Added in 1.3.5.
+     *  @since Added in 1.3.5.
      */
     std::string snippet(const std::string & text,
 			size_t length = 500,
@@ -601,62 +605,44 @@ class XAPIAN_VISIBILITY_DEFAULT MSetIterator {
     std::string get_description() const;
 };
 
-bool
-XAPIAN_NOTHROW(operator==(const MSetIterator &a, const MSetIterator &b));
-
 /// Equality test for MSetIterator objects.
 inline bool
-operator==(const MSetIterator &a, const MSetIterator &b) XAPIAN_NOEXCEPT
+operator==(const MSetIterator& a, const MSetIterator& b) noexcept
 {
     return a.off_from_end == b.off_from_end;
 }
 
-inline bool
-XAPIAN_NOTHROW(operator!=(const MSetIterator &a, const MSetIterator &b));
-
 /// Inequality test for MSetIterator objects.
 inline bool
-operator!=(const MSetIterator &a, const MSetIterator &b) XAPIAN_NOEXCEPT
+operator!=(const MSetIterator& a, const MSetIterator& b) noexcept
 {
     return !(a == b);
 }
 
-bool
-XAPIAN_NOTHROW(operator<(const MSetIterator &a, const MSetIterator &b));
-
 /// Inequality test for MSetIterator objects.
 inline bool
-operator<(const MSetIterator &a, const MSetIterator &b) XAPIAN_NOEXCEPT
+operator<(const MSetIterator& a, const MSetIterator& b) noexcept
 {
     return a.off_from_end > b.off_from_end;
 }
 
-inline bool
-XAPIAN_NOTHROW(operator>(const MSetIterator &a, const MSetIterator &b));
-
 /// Inequality test for MSetIterator objects.
 inline bool
-operator>(const MSetIterator &a, const MSetIterator &b) XAPIAN_NOEXCEPT
+operator>(const MSetIterator& a, const MSetIterator& b) noexcept
 {
     return b < a;
 }
 
-inline bool
-XAPIAN_NOTHROW(operator>=(const MSetIterator &a, const MSetIterator &b));
-
 /// Inequality test for MSetIterator objects.
 inline bool
-operator>=(const MSetIterator &a, const MSetIterator &b) XAPIAN_NOEXCEPT
+operator>=(const MSetIterator& a, const MSetIterator& b) noexcept
 {
     return !(a < b);
 }
 
-inline bool
-XAPIAN_NOTHROW(operator<=(const MSetIterator &a, const MSetIterator &b));
-
 /// Inequality test for MSetIterator objects.
 inline bool
-operator<=(const MSetIterator &a, const MSetIterator &b) XAPIAN_NOEXCEPT
+operator<=(const MSetIterator& a, const MSetIterator& b) noexcept
 {
     return !(b < a);
 }

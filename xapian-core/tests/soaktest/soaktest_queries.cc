@@ -1,4 +1,4 @@
-/** @file soaktest_queries.cc
+/** @file
  * @brief Soaktest generating lots of random queries.
  */
 /* Copyright (C) 2010 Richard Boulton
@@ -239,6 +239,4 @@ DEFINE_TESTCASE(queries1, writable && !remote && !inmemory) {
 	TEST(mset_range_is_same(mset1, 0, msetall, 0, mset1.size()));
 	TEST(mset_range_is_same(mset10, 0, msetall, 0, mset10.size()));
     }
-
-    return true;
 }

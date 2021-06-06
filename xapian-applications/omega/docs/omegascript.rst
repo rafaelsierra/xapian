@@ -60,11 +60,18 @@ values.
 ${...}
 	commented-out code
 
-$addfilter{TERM}
+$addfilter{TERM[,TYPE]}
         add filter term ``TERM`` as if it had been passed as a ``B`` CGI
-        parameter.  You must use ``$addfilter`` before any command which
-        requires the query to have been parsed - see ``$setmap`` for a list
-        of these commands.
+        parameter (if ``TYPE`` is not-specified, empty or ``B``), or as a
+        negated filter as if passed as an ``N`` CGI parameter (if ``TYPE`` is
+        ``N``).  Invalid types result in an error.
+
+        Support for the second parameter was added in Omega 1.4.12 - in older
+        versions only ``$addfilter{TERM}`` was supported and added ``B``-style
+        filters.
+
+        You must use ``$addfilter`` before any command which requires the query
+        to have been parsed - see ``$setmap`` for a list of these commands.
 
 $allterms[{DOCID}]
         list of all terms indexing the document with docid `DOCID` - if used
@@ -177,17 +184,21 @@ $error
         ``$seterror``.
 
 $field{NAME[,DOCID]}
-	lookup field ``NAME`` in document ``DOCID``.  If ``DOCID`` is omitted
-	then the current hit is used (which only works inside ``$hitlist``).
+        lookup field ``NAME`` in document ``DOCID``.  If ``DOCID`` is omitted
+        then the field is looked up in the current hit (which only works inside
+        ``$hitlist``).
 
-	If multiple instances of field exist the field values are returned tab
-	separated, which means you can pass the results to ``$map``, e.g.::
+        If multiple instances of field exist the field values are returned as
+        an OmegaScript list (i.e. tab separated), which means you can pass the
+        results to other commands which take a list, such as ``$foreach``, e.g.
+        ::
 
-            $map{$field{keywords},<b>$html{$_}</b><br>}
+            $foreach{$field{keywords},<b>$html{$_}</b><br>}
 
 $filesize{SIZE}
 	pretty printed filesize (e.g. ``1 byte``, ``100 bytes``, ``2.1K``,
-        ``4.0M``, ``1.3G``).  If ``SIZE`` is negative, expands to nothing.
+        ``4.0M``, ``1.3G``).  If ``SIZE`` is empty or a negative integer,
+        expands to nothing.
 
 $filters
         serialised version of filter-like settings (currently ``B``, ``N``,
@@ -205,8 +216,8 @@ $filterterms{PREFIX}
              <SELECT NAME="B">
              <OPTION VALUE=""
              $if{$map{$cgilist{B},$eq{$substr{$_,0,1},H}},,SELECTED}> Any
-             $map{$filterterms{H},
-             <OPTION VALUE="$html{$_}" $if{$find{$cgilist{B},$html{$_}},SELECTED}>
+             $foreach{$filterterms{H},
+             <OPTION VALUE="$html{$_}" $if{$find{$cgilist{B},$_},SELECTED}>
              $html{$substr{$_,1}}
              </OPTION>
              }
@@ -218,6 +229,17 @@ $find{LIST,STRING}
 
 $fmt
 	name of current format (as set by CGI parameter ``FMT``, or the default)
+
+$foreach{LIST,STUFF)
+        evaluated argument ``STUFF`` for each entry in list ``LIST``. If
+        ``LIST`` contains the entries ``15``, ``13``, ``5``, ``7``, ``1``
+        then::
+
+            "$foreach{LIST,$chr{$add{$_,64}}}" = "OMEGA"
+
+        If you want a list as output instead then see ``$map``.
+
+        Added in Omega 1.4.18.
 
 $freq{term}
 	frequency of a term
@@ -281,11 +303,76 @@ $json{STRING}
 
         Added in Omega 1.3.1.
 
-$jsonarray{LIST}
-        encodes LIST (a string of tab-separated values) as a JSON array, e.g.
+$jsonarray{LIST[,FORMAT]}
+        encodes LIST (a string of tab-separated values) as a JSON array.  By
+        default the elements of the array are encoded as JSON strings, but
+        if ``FORMAT`` is specified it's evaluated for each element in turn
+        with ``$_`` set to the element value and the result used instead.
+
+        The default ``FORMAT`` is equivalent to ``"$json{$_}"``.
+
+        Examples:
+
         ``$jsonarray{$split{a "b" c:\}}`` gives ``["a","\"b\"","c:\\"]``
 
+        ``$jsonarray{$split{2 3 5 7},$mul{$_,$_}}`` gives ``[4,9,25,49]``
+
         Added in Omega 1.3.1, but buggy until 1.3.4.
+
+        Support for the second argument added in Omega 1.4.15.
+
+$jsonbool{COND}
+        returns a JSON bool value (i.e. ``true`` or ``false``) for OmegaScript
+        value ``COND``.
+
+        This is exactly equivalent to ``$if{COND,true,false}`` and is provided
+        just to allow more readable JSON-producing templates.  This means that
+        ``COND`` being empty is false and all non-empty values are true (so
+        note that ``$jsonbool{0}`` gives ``true`` - if you want a numeric test,
+        you can use ``$jsonbool{$ne{VALUE,0}}``
+
+        Added in Omega 1.4.15.
+
+$jsonobject{MAP[,KEYFORMAT[,VALUEFORMAT]]}
+        encodes OmegaScript map ``MAP`` (as set by ``$setmap``) as a JSON object.
+
+        ``KEYFORMAT`` provides a way to modify key values.  It's evaluated for
+        each key with ``$_`` set to the OmegaScript map key.  If omitted or
+        empty then the keys are used as-is (so it effectively defaults to
+        ``$_``).  For example ``$jsonobject{foo,$lower{$_}}`` forces keys to
+        lower case.
+
+        You probably want to avoid creating duplicate keys (RFC 2119 says they
+        ``SHOULD be unique``).  Note that the resulting value should be an
+        OmegaScript string - don't pass it though ``$json{}`` or wrap it in
+        double quotes.
+
+        ``VALUEFORMAT`` provides a way to specify how to encode values.  It's
+        evaluated for each value with ``$_`` set to the OmegaScript map value
+        and the result should be JSON to use as the JSON object value.  If
+        omitted or empty the value is encoded as a JSON string (so effectively
+        the default is ``"$json{$_}"``).  Note that (unlike ``KEYFORMAT``) this
+        does need to include ``$json{}`` and double quotes, because the value
+        doesn't have to be a JSON string.
+
+        Simple example::
+
+          $jsonobject{foo}
+
+        More complex example which upper-cases the keys and uses JSON integers
+        for the values::
+
+          $jsonobject{foo,$upper{$_},$_}
+
+        Added in Omega 1.4.15.  Since 1.4.19 the returned JSON no longer
+        contains newlines, which makes it usable as a single line serialisation
+        format without post-processing.
+
+$keys{MAP}
+        returns a list containing the keys of MAP (as set by ``$setmap``).
+        The keys are in sorted order (by raw byte comparison).
+
+        Added in Omega 1.4.15.
 
 $last
         MSet index one beyond the end of the current page (so ``$hit`` runs
@@ -310,11 +397,21 @@ $list{LIST,...}
 	last two forms aren't redundant as it may at first appear).
 
 $log{LOGFILE[,ENTRY]}
-        write to the log file ``LOGFILE`` in directory ``log_dir`` (set in
-        ``omega.conf``).  ``ENTRY`` is the OmegaScript for the log entry, and a
-        linefeed is appended.  If ``LOGFILE`` cannot be opened for writing,
-        nothing is done (and ``ENTRY`` isn't evaluated).  ``ENTRY`` defaults to
-        a format similar to the Common Log Format used by webservers.
+        append to the log file ``LOGFILE``.  ``LOGFILE`` will be resolved as a
+        relative path starting from directory ``log_dir`` (as specified in
+        ``omega.conf``).  ``LOGFILE`` may not contain the substring ``..``.
+
+        ``ENTRY`` is the OmegaScript for the log entry, which is evaluated and
+        a linefeed appended.  ``ENTRY`` defaults to a format similar to the
+        Common Log Format used by webservers.  If an error occurs when trying
+        to open the log file then ``ENTRY`` won't be evaluated.
+
+        If the logfile can't be opened or writing to it fails then ``$log``
+        returns an error message (since Omega 1.5.0), otherwise it returns
+        nothing.  If you want to ignore logging errors, you can ignore the
+        return value using ``$if`` with no action like so::
+
+         $if{$log{example.log}}
 
 $lookup{CDBFILE,KEY}
         Return the tag corresponding to key ``KEY`` in the CDB file
@@ -343,14 +440,15 @@ $lower{TEXT}
 	return UTF-8 text ``TEXT`` converted to lower case.
 
 $map{LIST,STUFF)
-	map a list into the evaluated argument. If ``LIST`` is
-	1, 2 then::
+        map a list into the evaluated argument. If ``LIST`` contains ``1``,
+        ``2`` then::
 
-	 "$map{LIST,x$_ = $_; }" = "x1 = 1;	x2 = 2; "
+            "$map{LIST,x$_=$_;}" = "x1=1;	x2=2;"
 
-	Note that $map{} returns a list (this is a change from older
-	versions). If the tabs are a problem, use $list{$map{...},}
-	to get rid of them.
+        Note that $map{} returns a list (since Omega 0.5.0). If the tabs are a
+        problem, then ``$foreach{LIST,STUFF}`` does the same thing but just
+        concatenates the results directly rather than adding tabs to make a
+        list.
 
 $match{REGEX,STRING[,OPTIONS]}
 	perform a regex match using Perl-compatible regular expressions. Returns
@@ -555,6 +653,10 @@ $set{OPT,VALUE}
         * flag_wildcard_multi (new in 1.5.0)
         * flag_wildcard_single (new in 1.5.0)
 
+        Note that the ``Xapian::QueryParser::FLAG_ACCUMULATE`` flag is always
+        enabled by Omega because it's needed for ``$stoplist`` and ``$unstem``
+        to work correctly, and is deliberately not included in the above list.
+
 	Omega 1.2.7 added support for parsing different query fields with
 	different prefixes and you can specify different QueryParser flags for
 	each prefix - for example, for the ``XFOO`` prefix use
@@ -707,26 +809,38 @@ $srandom{SEED}
 
 $stoplist
 	returns a list of any terms in the query which were ignored as
-	stopwords.
+	stopwords.  Since Omega 1.4.18 ``$stoplist`` reports such terms for
+        all query strings parsed as part of the current query - in previous
+        versions only this only reported stopwords for the query string
+        which was parsed last (which would be the one with the prefix sorting
+        last in byte sort order, and if there were multiple such query strings
+        then the one specified last).
 
 $subdb[{DOCID}]
-        return the name of the sub-database containing ``DOCID`` (or the
-        current document in the histlist if ``DOCID`` is omitted).
+        return the name from a ``DB`` parameter for the sub-database containing
+        ``DOCID``.
 
-        NB: The current implementation assumes that each omega database name
-        corresponds to a single Xapian database - if a database name refers to
-        a stub database file expanding to multiple Xapian databases then this
-        command will misbehave.
+        If ``DOCID`` is omitted it defaults to the current document in the
+        hitlist.
+
+        Prior to Xapian 1.4.12 the implementation assumed that each omega
+        database name corresponded to a single Xapian database and if a
+        database name referred to a stub database file expanding to multiple
+        Xapian databases then this command would misbehave.  In 1.4.12 and
+        later this case is taken into account.
 
 $subid[{DOCID}]
-        return the docid in the sub-database corresponding to ``DOCID`` in the
-        combined database (or the current document in the histlist if ``DOCID``
-        is omitted).
+        return the docid in ``$subdb{DOCID}`` corresponding to ``DOCID`` in the
+        combined database.
 
-        NB: The current implementation assumes that each omega database name
-        corresponds to a single Xapian database - if a database name refers to
-        a stub database file expanding to multiple Xapian databases then this
-        command will misbehave.
+        If ``DOCID`` is omitted it defaults to the current document in the
+        hitlist.
+
+        Prior to Xapian 1.4.12 the implementation assumed that each omega
+        database name corresponded to a single Xapian database and if a
+        database name referred to a stub database file expanding to multiple
+        Xapian databases then this command would misbehave.  In 1.4.12 and
+        later this case is taken into account.
 
 $substr{STRING,START[,LENGTH]}
         returns the substring of ``STRING`` which starts at byte position
@@ -824,7 +938,12 @@ $unprefix{TERM}
 
 $unstem{TERM}
 	maps a stemmed term to a list of the unstemmed forms of it used in
-	the query
+	the query.  Since Omega 1.4.18 ``$unstem`` reports unstemmed forms in
+        all query strings parsed as part of the current query - in previous
+        versions only this only reported unstemmed forms from the query string
+        which was parsed last (which would be the one with the prefix sorting
+        last in byte sort order, and if there were multiple such query strings
+        then the one specified last).
 
 $upper{TEXT}
 	return UTF-8 text ``TEXT`` converted to upper case.
@@ -930,12 +1049,20 @@ $cond{COND1,THEN1[,COND2,THEN2]...[,ELSE]}
 
         Added in Omega 1.4.6.
 
-$if{COND,THEN[,ELSE]}
+$if{COND[,THEN[,ELSE]]}
         if ``COND`` is non-empty, evaluates and returns ``THEN``; otherwise
-        evaluates and returns ``ELSE`` (if present, otherwise returns nothing).
+        evaluates and returns ``ELSE``.  If ``THEN`` and/or ``ELSE`` are omitted
+        then returns nothing.  You can use ``$if{COND}`` to evaluate ``COND``
+        but discard the result of that evaluation, which can be useful if
+        ``COND`` has side-effects.
 
-$include{FILE}
-	include another OmegaScript file
+        The ability to omit ``THEN`` was added in Omega 1.4.15.
+
+$include{FILE[,FALLBACK]}
+        include another OmegaScript file ``FILE``.  If opening ``FILE`` fails, then
+        ``FALLBACK`` is evaluated and returned.
+
+        Support for the ``FALLBACK`` argument was added in Omega 1.4.18.
 
 $switch{EXPR,CASE1,VALUE1,[CASE2,VALUE2]...[,DEFAULT]}
         first evaluates ``EXPR``, and then evaluates ``CASE1``, ``CASE2``, ...

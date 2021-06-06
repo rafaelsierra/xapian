@@ -1,4 +1,4 @@
-/** @file glass_synonym.h
+/** @file
  * @brief Synonym data for a glass database.
  */
 /* Copyright (C) 2005,2007,2008,2009,2011,2014,2016,2017 Olly Betts
@@ -167,9 +167,6 @@ class GlassSynonymTermList : public AllTermsList {
 
     /// Return the term frequency for the term at the current position.
     Xapian::doccount get_termfreq() const;
-
-    /// Return the collection frequency for the term at the current position.
-    Xapian::termcount get_collection_freq() const;
 
     /// Advance to the next term in the list.
     TermList * next();

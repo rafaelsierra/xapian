@@ -1,4 +1,4 @@
-/** @file boolweight.cc
+/** @file
  * @brief Xapian::BoolWeight class - boolean weighting
  */
 /* Copyright (C) 2009,2011,2016 Olly Betts
@@ -69,7 +69,7 @@ BoolWeight::unserialise(const string& s) const
 
 double
 BoolWeight::get_sumpart(Xapian::termcount, Xapian::termcount,
-			Xapian::termcount) const
+			Xapian::termcount, Xapian::termcount) const
 {
     return 0;
 }
@@ -81,7 +81,9 @@ BoolWeight::get_maxpart() const
 }
 
 double
-BoolWeight::get_sumextra(Xapian::termcount, Xapian::termcount) const
+BoolWeight::get_sumextra(Xapian::termcount,
+			 Xapian::termcount,
+			 Xapian::termcount) const
 {
     return 0;
 }

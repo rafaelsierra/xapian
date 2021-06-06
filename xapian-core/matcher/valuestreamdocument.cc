@@ -1,4 +1,4 @@
-/** @file valuestreamdocument.cc
+/** @file
  * @brief A document which gets its values from a ValueStreamManager.
  */
 /* Copyright (C) 2009,2011,2014,2017 Olly Betts
@@ -44,7 +44,7 @@ ValueStreamDocument::~ValueStreamDocument()
 }
 
 void
-ValueStreamDocument::new_shard(size_t n)
+ValueStreamDocument::new_shard(Xapian::doccount n)
 {
     AssertRel(n,>,0);
     AssertRel(n,<,n_shards);

@@ -1,4 +1,4 @@
-/** @file dicecoeffweight.cc
+/** @file
  * @brief Xapian::DiceCoeffWeight class
  */
 /* Copyright (C) 2018 Guruprasad Hegde
@@ -77,15 +77,18 @@ DiceCoeffWeight::serialise() const
 DiceCoeffWeight *
 DiceCoeffWeight::unserialise(const string & s) const
 {
-    if (rare(!s.empty()))
+    if (rare(!s.empty())) {
 	throw Xapian::SerialisationError("Extra data in "
-		"DiceCoeffWeight::unserialise()");
+					 "DiceCoeffWeight::unserialise()");
+    }
     return new DiceCoeffWeight;
 }
 
 double
-DiceCoeffWeight::get_sumpart(Xapian::termcount wdf, Xapian::termcount,
-			     Xapian::termcount uniqterms) const
+DiceCoeffWeight::get_sumpart(Xapian::termcount wdf,
+			     Xapian::termcount,
+			     Xapian::termcount uniqterms,
+			     Xapian::termcount) const
 {
     if (wdf == 0) return 0.0;
     return factor * 2.0 / (get_query_length() + uniqterms);
@@ -98,7 +101,9 @@ DiceCoeffWeight::get_maxpart() const
 }
 
 double
-DiceCoeffWeight::get_sumextra(Xapian::termcount, Xapian::termcount) const
+DiceCoeffWeight::get_sumextra(Xapian::termcount,
+			      Xapian::termcount,
+			      Xapian::termcount) const
 {
     return 0;
 }
@@ -112,9 +117,10 @@ DiceCoeffWeight::get_maxextra() const
 DiceCoeffWeight *
 DiceCoeffWeight::create_from_parameters(const char * p) const
 {
-    if (*p != '\0')
+    if (*p != '\0') {
 	throw InvalidArgumentError("No parameters are required for "
-		"DiceCoeffWeight");
+				   "DiceCoeffWeight");
+    }
     return new Xapian::DiceCoeffWeight;
 }
 

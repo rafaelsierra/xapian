@@ -1,4 +1,4 @@
-/** @file honey_postlist_encodings.h
+/** @file
  * @brief Encoding and decoding functions for honey postlists
  */
 /* Copyright (C) 2015,2018 Olly Betts
@@ -31,7 +31,7 @@ encode_initial_chunk_header(Xapian::doccount termfreq,
 			    Xapian::docid chunk_last,
 			    Xapian::termcount first_wdf,
 			    Xapian::termcount wdf_max,
-			    std::string & out)
+			    std::string& out)
 {
     Assert(termfreq != 0);
     pack_uint(out, first - 1);
@@ -83,7 +83,7 @@ encode_initial_chunk_header(Xapian::doccount termfreq,
 	pack_uint(out, last - first - 1);
 	if (first_wdf != (collfreq / 2)) {
 	    pack_uint(out, first_wdf);
-	    AssertEq(max(first_wdf, collfreq - first_wdf), wdf_max);
+	    AssertEq(std::max(first_wdf, collfreq - first_wdf), wdf_max);
 	} else {
 	    AssertEq(collfreq - first_wdf, wdf_max);
 	}
@@ -112,14 +112,14 @@ encode_initial_chunk_header(Xapian::doccount termfreq,
 }
 
 inline bool
-decode_initial_chunk_header(const char ** p, const char * end,
-			    Xapian::doccount & termfreq,
-			    Xapian::termcount & collfreq,
-			    Xapian::docid & first,
-			    Xapian::docid & last,
-			    Xapian::docid & chunk_last,
-			    Xapian::termcount & first_wdf,
-			    Xapian::termcount & wdf_max)
+decode_initial_chunk_header(const char** p, const char* end,
+			    Xapian::doccount& termfreq,
+			    Xapian::termcount& collfreq,
+			    Xapian::docid& first,
+			    Xapian::docid& last,
+			    Xapian::docid& chunk_last,
+			    Xapian::termcount& first_wdf,
+			    Xapian::termcount& wdf_max)
 {
     if (!unpack_uint(p, end, &first)) {
 	return false;
@@ -146,7 +146,7 @@ decode_initial_chunk_header(const char ** p, const char * end,
 	chunk_last = last = first + termfreq + 1;
 	termfreq = 2;
 	first_wdf = collfreq / 2;
-	wdf_max = max(first_wdf, collfreq - first_wdf);
+	wdf_max = std::max(first_wdf, collfreq - first_wdf);
 	return true;
     }
 
@@ -159,7 +159,7 @@ decode_initial_chunk_header(const char ** p, const char * end,
 	first_wdf = last;
 	chunk_last = last = first + termfreq + 1;
 	termfreq = 2;
-	wdf_max = max(first_wdf, collfreq - first_wdf);
+	wdf_max = std::max(first_wdf, collfreq - first_wdf);
 	return true;
     }
 
@@ -192,9 +192,9 @@ decode_initial_chunk_header(const char ** p, const char * end,
 }
 
 inline bool
-decode_initial_chunk_header_freqs(const char ** p, const char * end,
-				  Xapian::doccount & termfreq,
-				  Xapian::termcount & collfreq)
+decode_initial_chunk_header_freqs(const char** p, const char* end,
+				  Xapian::doccount& termfreq,
+				  Xapian::termcount& collfreq)
 {
     Xapian::docid first;
     if (!unpack_uint(p, end, &first)) {
@@ -247,7 +247,7 @@ inline void
 encode_delta_chunk_header(Xapian::docid chunk_first,
 			  Xapian::docid chunk_last,
 			  Xapian::termcount chunk_first_wdf,
-			  std::string & out)
+			  std::string& out)
 {
     Assert(chunk_first_wdf != 0);
     pack_uint(out, chunk_last - chunk_first);
@@ -255,7 +255,7 @@ encode_delta_chunk_header(Xapian::docid chunk_first,
 }
 
 inline bool
-decode_delta_chunk_header(const char ** p, const char * end,
+decode_delta_chunk_header(const char** p, const char* end,
 			  Xapian::docid chunk_last,
 			  Xapian::docid& chunk_first,
 			  Xapian::termcount& chunk_first_wdf)
@@ -272,13 +272,13 @@ decode_delta_chunk_header(const char ** p, const char * end,
 inline void
 encode_delta_chunk_header_no_wdf(Xapian::docid chunk_first,
 				 Xapian::docid chunk_last,
-				 std::string & out)
+				 std::string& out)
 {
     pack_uint(out, chunk_last - chunk_first);
 }
 
 inline bool
-decode_delta_chunk_header_no_wdf(const char ** p, const char * end,
+decode_delta_chunk_header_no_wdf(const char** p, const char* end,
 				 Xapian::docid chunk_last,
 				 Xapian::docid& chunk_first)
 {

@@ -1,4 +1,4 @@
-/** @file queryinternal.cc
+/** @file
  * @brief Xapian::Query internals
  */
 /* Copyright (C) 2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019 Olly Betts
@@ -29,8 +29,8 @@
 #include "xapian/unicode.h"
 
 #include "api/editdistance.h"
+#include "backends/postlist.h"
 #include "heap.h"
-#include "leafpostlist.h"
 #include "matcher/andmaybepostlist.h"
 #include "matcher/andnotpostlist.h"
 #include "matcher/boolorpostlist.h"
@@ -46,7 +46,7 @@
 #include "matcher/queryoptimiser.h"
 #include "matcher/valuerangepostlist.h"
 #include "matcher/valuegepostlist.h"
-#include "net/length.h"
+#include "pack.h"
 #include "serialise-double.h"
 #include "stringutils.h"
 #include "termlist.h"
@@ -58,7 +58,7 @@
 #include "unicode/description_append.h"
 
 #include <algorithm>
-#include <functional>
+#include <limits>
 #include <list>
 #include <memory>
 #include <string>
@@ -68,10 +68,6 @@
 using namespace std;
 
 static constexpr unsigned MAX_UTF_8_CHARACTER_LENGTH = 4;
-
-template<class CLASS> struct delete_ptr {
-    void operator()(CLASS *p) const { delete p; }
-};
 
 using Xapian::Internal::AndContext;
 using Xapian::Internal::OrContext;
@@ -213,17 +209,8 @@ class Context {
 	if (new_size >= pls.size())
 	    return;
 
-	const PostList * hint_pl = qopt->get_hint_postlist();
 	for (auto&& i = pls.begin() + new_size; i != pls.end(); ++i) {
-	    const PostList * pl = as_postlist(*i);
-	    if (rare(pl == hint_pl && hint_pl)) {
-		// We were about to delete qopt's hint - instead tell qopt to
-		// take ownership.
-		qopt->take_hint_ownership();
-		hint_pl = NULL;
-	    } else {
-		delete pl;
-	    }
+	    qopt->destroy_postlist(as_postlist(*i));
 	}
 	pls.resize(new_size);
     }
@@ -557,6 +544,17 @@ class AndContext : public Context<PostList*> {
 
     list<PosFilter> pos_filters;
 
+    unique_ptr<BoolOrContext> not_ctx;
+
+    unique_ptr<OrContext> maybe_ctx;
+
+    /** True if this AndContext has seen a no-op MatchAll.
+     *
+     *  If it has and it ends up empty then the resulting postlist should be
+     *  MatchAll not MatchNothing.
+     */
+    bool match_all = false;
+
   public:
     AndContext(QueryOptimiser* qopt_, size_t reserve)
 	: Context(qopt_, reserve) { }
@@ -564,15 +562,32 @@ class AndContext : public Context<PostList*> {
     bool add_postlist(PostList* pl) {
 	if (!pl) {
 	    shrink(0);
+	    match_all = false;
 	    return false;
 	}
 	pls.emplace_back(pl);
 	return true;
     }
 
+    void set_match_all() { match_all = true; }
+
     void add_pos_filter(Query::op op_,
 			size_t n_subqs,
 			Xapian::termcount window);
+
+    BoolOrContext& get_not_ctx(size_t reserve) {
+	if (!not_ctx) {
+	    not_ctx.reset(new BoolOrContext(qopt, reserve));
+	}
+	return *not_ctx;
+    }
+
+    OrContext& get_maybe_ctx(size_t reserve) {
+	if (!maybe_ctx) {
+	    maybe_ctx.reset(new OrContext(qopt, reserve));
+	}
+	return *maybe_ctx;
+    }
 
     PostList * postlist();
 };
@@ -615,25 +630,47 @@ PostList *
 AndContext::postlist()
 {
     if (pls.empty()) {
+	if (match_all) {
+	    return qopt->open_post_list(string(), 0, 0.0);
+	}
 	return NULL;
     }
 
-    unique_ptr<PostList> pl(new MultiAndPostList(pls.begin(), pls.end(),
-						 qopt->matcher, qopt->db_size));
+    auto matcher = qopt->matcher;
+    auto db_size = qopt->db_size;
+
+    unique_ptr<PostList> pl;
+    if (pls.size() == 1) {
+	pl.reset(pls[0]);
+    } else {
+	pl.reset(new MultiAndPostList(pls.begin(), pls.end(),
+				      matcher, db_size));
+    }
+
+    if (not_ctx && !not_ctx->empty()) {
+	PostList* rhs = not_ctx->postlist();
+	pl.reset(new AndNotPostList(pl.release(), rhs, matcher, db_size));
+	not_ctx.reset();
+    }
 
     // Sort the positional filters to try to apply them in an efficient order.
     // FIXME: We need to figure out what that is!  Try applying lowest cf/tf
     // first?
 
     // Apply any positional filters.
-    list<PosFilter>::const_iterator i;
-    for (i = pos_filters.begin(); i != pos_filters.end(); ++i) {
-	const PosFilter & filter = *i;
-	pl.reset(filter.postlist(pl.release(), pls, qopt->matcher));
+    for (const PosFilter& filter : pos_filters) {
+	pl.reset(filter.postlist(pl.release(), pls, matcher));
     }
 
     // Empty pls so our destructor doesn't delete them all!
     pls.clear();
+
+    if (maybe_ctx && !maybe_ctx->empty()) {
+	PostList* rhs = maybe_ctx->postlist();
+	pl.reset(new AndMaybePostList(pl.release(), rhs, matcher, db_size));
+	maybe_ctx.reset();
+    }
+
     return pl.release();
 }
 
@@ -642,7 +679,7 @@ AndContext::postlist()
 Query::Internal::~Internal() { }
 
 size_t
-Query::Internal::get_num_subqueries() const XAPIAN_NOEXCEPT
+Query::Internal::get_num_subqueries() const noexcept
 {
     return 0;
 }
@@ -671,7 +708,7 @@ Query::Internal::gather_terms(void *) const
 }
 
 Xapian::termcount
-Query::Internal::get_length() const XAPIAN_NOEXCEPT
+Query::Internal::get_length() const noexcept
 {
     return 0;
 }
@@ -692,13 +729,18 @@ Query::Internal::unserialise(const char ** p, const char * end,
 	    //   cccc -> code (which OP_XXX)
 	    size_t n_subqs = ch & 0x07;
 	    if (n_subqs == 0) {
-		decode_length(p, end, n_subqs);
+		if (!unpack_uint(p, end, &n_subqs)) {
+		    unpack_throw_serialisation_error(*p);
+		}
 		n_subqs += 8;
 	    }
 	    unsigned char code = (ch >> 3) & 0x0f;
 	    Xapian::termcount parameter = 0;
-	    if (code >= 13)
-		decode_length(p, end, parameter);
+	    if (code >= 13) {
+		if (!unpack_uint(p, end, &parameter)) {
+		    unpack_throw_serialisation_error(*p);
+		}
+	    }
 	    Xapian::Internal::QueryBranch * result;
 	    switch (code) {
 		case 0: // OP_AND
@@ -759,7 +801,9 @@ Query::Internal::unserialise(const char ** p, const char * end,
 	    //     3: wqf -> encoded value follows; pos -> encoded value follows
 	    size_t len = ch & 0x0f;
 	    if (len == 0) {
-		decode_length(p, end, len);
+		if (!unpack_uint(p, end, &len)) {
+		    unpack_throw_serialisation_error(*p);
+		}
 		len += 16;
 	    }
 	    if (size_t(end - *p) < len)
@@ -770,12 +814,18 @@ Query::Internal::unserialise(const char ** p, const char * end,
 	    int code = ((ch >> 4) & 0x03);
 
 	    Xapian::termcount wqf = static_cast<Xapian::termcount>(code > 0);
-	    if (code == 3)
-		decode_length(p, end, wqf);
+	    if (code == 3) {
+		if (!unpack_uint(p, end, &wqf)) {
+		    unpack_throw_serialisation_error(*p);
+		}
+	    }
 
 	    Xapian::termpos pos = 0;
-	    if (code >= 2)
-		decode_length(p, end, pos);
+	    if (code >= 2) {
+		if (!unpack_uint(p, end, &pos)) {
+		    unpack_throw_serialisation_error(*p);
+		}
+	    }
 
 	    return new Xapian::Internal::QueryTerm(term, wqf, pos);
 	}
@@ -789,22 +839,25 @@ Query::Internal::unserialise(const char ** p, const char * end,
 	    //     1: OP_VALUE_GE
 	    Xapian::valueno slot = ch & 15;
 	    if (slot == 15) {
-		decode_length(p, end, slot);
+		if (!unpack_uint(p, end, &slot)) {
+		    unpack_throw_serialisation_error(*p);
+		}
 		slot += 15;
 	    }
-	    size_t len;
-	    decode_length_and_check(p, end, len);
-	    string begin(*p, len);
-	    *p += len;
+	    string begin;
+	    if (!unpack_string(p, end, begin)) {
+		unpack_throw_serialisation_error(*p);
+	    }
 	    if (ch & 0x10) {
 		// OP_VALUE_GE
 		return new Xapian::Internal::QueryValueGE(slot, begin);
 	    }
 
 	    // OP_VALUE_RANGE
-	    decode_length_and_check(p, end, len);
-	    string end_(*p, len);
-	    *p += len;
+	    string end_;
+	    if (!unpack_string(p, end, end_)) {
+		unpack_throw_serialisation_error(*p);
+	    }
 	    if (begin.empty()) // FIXME: is this right?
 		return new Xapian::Internal::QueryValueLE(slot, end_);
 	    return new Xapian::Internal::QueryValueRange(slot, begin, end_);
@@ -818,22 +871,20 @@ Query::Internal::unserialise(const char ** p, const char * end,
 		case 0x00: // OP_INVALID
 		    return new Xapian::Internal::QueryInvalid();
 		case 0x0a: { // Edit distance
-		    if (*p == end)
-			throw SerialisationError("not enough data");
 		    Xapian::termcount max_expansion;
-		    decode_length(p, end, max_expansion);
-		    if (end - *p < 2)
+		    if (!unpack_uint(p, end, &max_expansion) || end - *p < 2) {
 			throw SerialisationError("not enough data");
+		    }
 		    int flags = static_cast<unsigned char>(*(*p)++);
 		    op combiner = static_cast<op>(*(*p)++);
 		    unsigned edit_distance;
-		    decode_length(p, end, edit_distance);
 		    size_t fixed_prefix_len;
-		    decode_length(p, end, fixed_prefix_len);
-		    size_t len;
-		    decode_length_and_check(p, end, len);
-		    string pattern(*p, len);
-		    *p += len;
+		    string pattern;
+		    if (!unpack_uint(p, end, &edit_distance) ||
+			!unpack_uint(p, end, &fixed_prefix_len) ||
+			!unpack_string(p, end, pattern)) {
+			throw SerialisationError("not enough data");
+		    }
 		    using Xapian::Internal::QueryEditDistance;
 		    return new QueryEditDistance(pattern,
 						 max_expansion,
@@ -843,28 +894,26 @@ Query::Internal::unserialise(const char ** p, const char * end,
 						 fixed_prefix_len);
 		}
 		case 0x0b: { // Wildcard
-		    if (*p == end)
-			throw SerialisationError("not enough data");
 		    Xapian::termcount max_expansion;
-		    decode_length(p, end, max_expansion);
-		    if (end - *p < 2)
+		    if (!unpack_uint(p, end, &max_expansion) || end - *p < 2) {
 			throw SerialisationError("not enough data");
+		    }
 		    int flags = static_cast<unsigned char>(*(*p)++);
 		    op combiner = static_cast<op>(*(*p)++);
-		    size_t len;
-		    decode_length_and_check(p, end, len);
-		    string pattern(*p, len);
-		    *p += len;
+		    string pattern;
+		    if (!unpack_string(p, end, pattern)) {
+			throw SerialisationError("not enough data");
+		    }
 		    return new Xapian::Internal::QueryWildcard(pattern,
 							       max_expansion,
 							       flags,
 							       combiner);
 		}
 		case 0x0c: { // PostingSource
-		    size_t len;
-		    decode_length_and_check(p, end, len);
-		    string name(*p, len);
-		    *p += len;
+		    string name;
+		    if (!unpack_string(p, end, name)) {
+			throw SerialisationError("not enough data");
+		    }
 
 		    const PostingSource * reg_source = reg.get_posting_source(name);
 		    if (!reg_source) {
@@ -874,11 +923,13 @@ Query::Internal::unserialise(const char ** p, const char * end,
 			throw SerialisationError(m);
 		    }
 
-		    decode_length_and_check(p, end, len);
-		    PostingSource * source =
-			reg_source->unserialise_with_registry(string(*p, len),
+		    string serialised_source;
+		    if (!unpack_string(p, end, serialised_source)) {
+			throw SerialisationError("not enough data");
+		    }
+		    PostingSource* source =
+			reg_source->unserialise_with_registry(serialised_source,
 							      reg);
-		    *p += len;
 		    return new Xapian::Internal::QueryPostingSource(source->release());
 		}
 		case 0x0d: {
@@ -890,8 +941,10 @@ Query::Internal::unserialise(const char ** p, const char * end,
 		case 0x0e: {
 		    Xapian::termcount wqf;
 		    Xapian::termpos pos;
-		    decode_length(p, end, wqf);
-		    decode_length(p, end, pos);
+		    if (!unpack_uint(p, end, &wqf) ||
+			!unpack_uint(p, end, &pos)) {
+			throw SerialisationError("not enough data");
+		    }
 		    return new Xapian::Internal::QueryTerm(string(), wqf, pos);
 		}
 		case 0x0f:
@@ -917,10 +970,23 @@ Query::Internal::postlist_sub_and_like(AndContext& ctx,
 
 void
 Query::Internal::postlist_sub_or_like(OrContext& ctx,
-				      QueryOptimiser * qopt,
-				      double factor) const
+				      QueryOptimiser* qopt,
+				      double factor,
+				      bool keep_zero_weight) const
 {
-    ctx.add_postlist(postlist(qopt, factor));
+    Xapian::termcount save_total_subqs = qopt->get_total_subqs();
+    unique_ptr<PostList> pl(postlist(qopt, factor));
+    if (!keep_zero_weight && pl->recalc_maxweight() == 0.0) {
+	// This subquery can't contribute any weight, so can be discarded.
+	//
+	// Restore the value of total_subqs so that percentages don't get
+	// messed up if we increased total_subqs in the call to postlist()
+	// above.
+	qopt->set_total_subqs(save_total_subqs);
+	qopt->destroy_postlist(pl.release());
+	return;
+    }
+    ctx.add_postlist(pl.release());
 }
 
 void
@@ -941,7 +1007,7 @@ Query::Internal::postlist_sub_xor(XorContext& ctx,
 namespace Internal {
 
 Query::op
-QueryTerm::get_type() const XAPIAN_NOEXCEPT
+QueryTerm::get_type() const noexcept
 {
     return term.empty() ? Query::LEAF_MATCH_ALL : Query::LEAF_TERM;
 }
@@ -981,7 +1047,7 @@ QueryPostingSource::QueryPostingSource(PostingSource * source_)
 }
 
 Query::op
-QueryPostingSource::get_type() const XAPIAN_NOEXCEPT
+QueryPostingSource::get_type() const noexcept
 {
     return Query::LEAF_POSTING_SOURCE;
 }
@@ -1003,13 +1069,13 @@ QueryScaleWeight::QueryScaleWeight(double factor, const Query & subquery_)
 }
 
 Query::op
-QueryScaleWeight::get_type() const XAPIAN_NOEXCEPT
+QueryScaleWeight::get_type() const noexcept
 {
     return Query::OP_SCALE_WEIGHT;
 }
 
 size_t
-QueryScaleWeight::get_num_subqueries() const XAPIAN_NOEXCEPT
+QueryScaleWeight::get_num_subqueries() const noexcept
 {
     return 1;
 }
@@ -1039,6 +1105,19 @@ QueryTerm::postlist(QueryOptimiser * qopt, double factor) const
     RETURN(qopt->open_post_list(term, wqf, factor));
 }
 
+bool
+QueryTerm::postlist_sub_and_like(AndContext& ctx,
+				 QueryOptimiser* qopt,
+				 double factor) const
+{
+    if (term.empty() && !qopt->need_positions && factor == 0.0) {
+	// No-op MatchAll.
+	ctx.set_match_all();
+	return true;
+    }
+    return ctx.add_postlist(postlist(qopt, factor));
+}
+
 PostList*
 QueryPostingSource::postlist(QueryOptimiser * qopt, double factor) const
 {
@@ -1051,7 +1130,8 @@ QueryPostingSource::postlist(QueryOptimiser * qopt, double factor) const
     // be called on the Database::Internal object.
     const Xapian::Database wrappeddb(
 	    const_cast<Xapian::Database::Internal*>(&(qopt->db)));
-    RETURN(new ExternalPostList(wrappeddb, source.get(), factor, qopt->matcher,
+    RETURN(new ExternalPostList(wrappeddb, source.get(), factor,
+				qopt->matcher->get_max_weight_cached_flag_ptr(),
 				qopt->shard_index));
 }
 
@@ -1060,6 +1140,15 @@ QueryScaleWeight::postlist(QueryOptimiser * qopt, double factor) const
 {
     LOGCALL(QUERY, PostList*, "QueryScaleWeight::postlist", qopt | factor);
     RETURN(subquery.internal->postlist(qopt, factor * scale_factor));
+}
+
+bool
+QueryScaleWeight::postlist_sub_and_like(AndContext& ctx,
+					QueryOptimiser* qopt,
+					double factor) const
+{
+    return subquery.internal->postlist_sub_and_like(ctx, qopt,
+						    factor * scale_factor);
 }
 
 void
@@ -1117,16 +1206,14 @@ QueryValueRange::serialise(string & result) const
 	result += static_cast<char>(0x20 | slot);
     } else {
 	result += static_cast<char>(0x20 | 15);
-	result += encode_length(slot - 15);
+	pack_uint(result, slot - 15);
     }
-    result += encode_length(begin.size());
-    result += begin;
-    result += encode_length(end.size());
-    result += end;
+    pack_string(result, begin);
+    pack_string(result, end);
 }
 
 Query::op
-QueryValueRange::get_type() const XAPIAN_NOEXCEPT
+QueryValueRange::get_type() const noexcept
 {
     return Query::OP_VALUE_RANGE;
 }
@@ -1184,15 +1271,14 @@ QueryValueLE::serialise(string & result) const
 	result += static_cast<char>(0x20 | slot);
     } else {
 	result += static_cast<char>(0x20 | 15);
-	result += encode_length(slot - 15);
+	pack_uint(result, slot - 15);
     }
-    result += encode_length(0);
-    result += encode_length(limit.size());
-    result += limit;
+    pack_string_empty(result);
+    pack_string(result, limit);
 }
 
 Query::op
-QueryValueLE::get_type() const XAPIAN_NOEXCEPT
+QueryValueLE::get_type() const noexcept
 {
     return Query::OP_VALUE_LE;
 }
@@ -1226,7 +1312,7 @@ QueryValueGE::postlist(QueryOptimiser *qopt, double factor) const
     if (limit > db.get_value_upper_bound(slot)) {
 	RETURN(NULL);
     }
-    if (limit < lb) {
+    if (limit <= lb) {
 	// The range check isn't needed, but we do still need to consider
 	// which documents have a value set in this slot.  If this value is
 	// set for all documents, we can replace it with the MatchAll
@@ -1246,14 +1332,13 @@ QueryValueGE::serialise(string & result) const
 	result += static_cast<char>(0x20 | 0x10 | slot);
     } else {
 	result += static_cast<char>(0x20 | 0x10 | 15);
-	result += encode_length(slot - 15);
+	pack_uint(result, slot - 15);
     }
-    result += encode_length(limit.size());
-    result += limit;
+    pack_string(result, limit);
 }
 
 Query::op
-QueryValueGE::get_type() const XAPIAN_NOEXCEPT
+QueryValueGE::get_type() const noexcept
 {
     return Query::OP_VALUE_GE;
 }
@@ -1436,9 +1521,9 @@ QueryWildcard::postlist(QueryOptimiser * qopt, double factor) const
 	    op = Query::OP_OR;
 	}
 
-	bool old_in_synonym = qopt->in_synonym;
-	if (!old_in_synonym) {
-	    qopt->in_synonym = (op == Query::OP_SYNONYM);
+	bool old_compound_weight = qopt->compound_weight;
+	if (!old_compound_weight) {
+	    qopt->compound_weight = (op == Query::OP_SYNONYM);
 	}
 
 	BoolOrContext ctx(qopt, 0);
@@ -1448,7 +1533,7 @@ QueryWildcard::postlist(QueryOptimiser * qopt, double factor) const
 	    qopt->inc_total_subqs();
 	}
 
-	qopt->in_synonym = old_in_synonym;
+	qopt->compound_weight = old_compound_weight;
 
 	if (ctx.empty())
 	    RETURN(NULL);
@@ -1481,7 +1566,7 @@ QueryWildcard::postlist(QueryOptimiser * qopt, double factor) const
 }
 
 termcount
-QueryWildcard::get_length() const XAPIAN_NOEXCEPT
+QueryWildcard::get_length() const noexcept
 {
     // We currently assume wqf is 1 for calculating the synonym's weight
     // since conceptually the synonym is one "virtual" term.  If we were
@@ -1494,15 +1579,14 @@ void
 QueryWildcard::serialise(string & result) const
 {
     result += static_cast<char>(0x0b);
-    result += encode_length(max_expansion);
+    pack_uint(result, max_expansion);
     result += static_cast<unsigned char>(flags);
     result += static_cast<unsigned char>(combiner);
-    result += encode_length(pattern.size());
-    result += pattern;
+    pack_string(result, pattern);
 }
 
 Query::op
-QueryWildcard::get_type() const XAPIAN_NOEXCEPT
+QueryWildcard::get_type() const noexcept
 {
     return Query::OP_WILDCARD;
 }
@@ -1549,9 +1633,9 @@ QueryEditDistance::postlist(QueryOptimiser * qopt, double factor) const
 	    op = Query::OP_OR;
 	}
 
-	bool old_in_synonym = qopt->in_synonym;
-	if (!old_in_synonym) {
-	    qopt->in_synonym = (op == Query::OP_SYNONYM);
+	bool old_compound_weight = qopt->compound_weight;
+	if (!old_compound_weight) {
+	    qopt->compound_weight = (op == Query::OP_SYNONYM);
 	}
 
 	BoolOrContext ctx(qopt, 0);
@@ -1561,7 +1645,7 @@ QueryEditDistance::postlist(QueryOptimiser * qopt, double factor) const
 	    qopt->inc_total_subqs();
 	}
 
-	qopt->in_synonym = old_in_synonym;
+	qopt->compound_weight = old_compound_weight;
 
 	if (ctx.empty())
 	    RETURN(NULL);
@@ -1594,7 +1678,7 @@ QueryEditDistance::postlist(QueryOptimiser * qopt, double factor) const
 }
 
 termcount
-QueryEditDistance::get_length() const XAPIAN_NOEXCEPT
+QueryEditDistance::get_length() const noexcept
 {
     // We currently assume wqf is 1 for calculating the synonym's weight
     // since conceptually the synonym is one "virtual" term.  If we were
@@ -1607,17 +1691,16 @@ void
 QueryEditDistance::serialise(string & result) const
 {
     result += static_cast<char>(0x0a);
-    result += encode_length(max_expansion);
+    pack_uint(result, max_expansion);
     result += static_cast<unsigned char>(flags);
     result += static_cast<unsigned char>(combiner);
-    result += encode_length(edit_distance);
-    result += encode_length(fixed_prefix_len);
-    result += encode_length(pattern.size());
-    result += pattern;
+    pack_uint(result, edit_distance);
+    pack_uint(result, fixed_prefix_len);
+    pack_string(result, pattern);
 }
 
 Query::op
-QueryEditDistance::get_type() const XAPIAN_NOEXCEPT
+QueryEditDistance::get_type() const noexcept
 {
     return Query::OP_EDIT_DISTANCE;
 }
@@ -1651,14 +1734,14 @@ QueryEditDistance::get_description() const
 }
 
 Xapian::termcount
-QueryBranch::get_length() const XAPIAN_NOEXCEPT
+QueryBranch::get_length() const noexcept
 {
     // Sum results from all subqueries.
     Xapian::termcount result = 0;
     QueryVector::const_iterator i;
     for (i = subqueries.begin(); i != subqueries.end(); ++i) {
 	// MatchNothing subqueries should have been removed by done(), but we
-	// can't use Assert in a XAPIAN_NOEXCEPT function.  But we'll get a
+	// can't use Assert in a noexcept function.  But we'll get a
 	// segfault anyway.
 	result += (*i).internal->get_length();
     }
@@ -1696,9 +1779,9 @@ QueryBranch::serialise_(string & result, Xapian::termcount parameter) const
 	    ch |= subqueries.size();
 	result += ch;
 	if (subqueries.size() >= 8)
-	    result += encode_length(subqueries.size() - 8);
+	    pack_uint(result, subqueries.size() - 8);
 	if (ch >= MULTIWAY(13))
-	    result += encode_length(parameter);
+	    pack_uint(result, parameter);
     } else {
 	result += ch;
     }
@@ -1754,9 +1837,11 @@ QueryBranch::gather_terms(void * void_terms) const
 }
 
 void
-QueryBranch::do_bool_or_like(BoolOrContext& ctx, QueryOptimiser* qopt) const
+QueryBranch::do_bool_or_like(BoolOrContext& ctx,
+			     QueryOptimiser* qopt,
+			     size_t first) const
 {
-    LOGCALL_VOID(MATCH, "QueryBranch::do_bool_or_like", ctx | qopt);
+    LOGCALL_VOID(MATCH, "QueryBranch::do_bool_or_like", ctx | qopt | first);
 
     // FIXME: we could optimise by merging OP_ELITE_SET and OP_OR like we do
     // for AND-like operations.
@@ -1765,18 +1850,20 @@ QueryBranch::do_bool_or_like(BoolOrContext& ctx, QueryOptimiser* qopt) const
     // QuerySynonym::done() if the single subquery is a term or MatchAll.
     Assert(subqueries.size() >= 2 || get_op() == Query::OP_SYNONYM);
 
-    for (auto q : subqueries) {
+    QueryVector::const_iterator q;
+    for (q = subqueries.begin() + first; q != subqueries.end(); ++q) {
 	// MatchNothing subqueries should have been removed by done().
-	Assert(q.internal.get());
-	q.internal->postlist_sub_bool_or_like(ctx, qopt);
+	Assert((*q).internal.get());
+	(*q).internal->postlist_sub_bool_or_like(ctx, qopt);
     }
 }
 
 void
 QueryBranch::do_or_like(OrContext& ctx, QueryOptimiser * qopt, double factor,
-			Xapian::termcount elite_set_size, size_t first) const
+			Xapian::termcount elite_set_size, size_t first,
+			bool keep_zero_weight) const
 {
-    LOGCALL_VOID(MATCH, "QueryBranch::do_or_like", ctx | qopt | factor | elite_set_size);
+    LOGCALL_VOID(MATCH, "QueryBranch::do_or_like", ctx | qopt | factor | elite_set_size | first | keep_zero_weight);
 
     // FIXME: we could optimise by merging OP_ELITE_SET and OP_OR like we do
     // for AND-like operations.
@@ -1790,7 +1877,8 @@ QueryBranch::do_or_like(OrContext& ctx, QueryOptimiser * qopt, double factor,
     for (q = subqueries.begin() + first; q != subqueries.end(); ++q) {
 	// MatchNothing subqueries should have been removed by done().
 	Assert((*q).internal.get());
-	(*q).internal->postlist_sub_or_like(ctx, qopt, factor);
+	(*q).internal->postlist_sub_or_like(ctx, qopt, factor,
+					    keep_zero_weight);
     }
 
     size_t out_of = ctx.size() - size_before;
@@ -1820,13 +1908,13 @@ QueryBranch::do_synonym(QueryOptimiser * qopt, double factor) const
 	return ctx.postlist();
     }
 
-    bool old_in_synonym = qopt->in_synonym;
-    Assert(!old_in_synonym);
-    qopt->in_synonym = true;
+    bool old_compound_weight = qopt->compound_weight;
+    Assert(!old_compound_weight);
+    qopt->compound_weight = true;
     do_bool_or_like(ctx, qopt);
     PostList * pl = ctx.postlist();
+    qopt->compound_weight = old_compound_weight;
     if (!pl) return NULL;
-    qopt->in_synonym = old_in_synonym;
 
     bool wdf_disjoint = false;
     Assert(!subqueries.empty());
@@ -1890,14 +1978,15 @@ PostList *
 QueryBranch::do_max(QueryOptimiser * qopt, double factor) const
 {
     LOGCALL(MATCH, PostList *, "QueryBranch::do_max", qopt | factor);
-    OrContext ctx(qopt, subqueries.size());
-    do_or_like(ctx, qopt, factor);
     if (factor == 0.0) {
-	// If we have a factor of 0, we don't care about the weights, so
-	// we're just like a normal OR query.
+	// Without the weights we're just like a normal OR query.
+	BoolOrContext ctx(qopt, subqueries.size());
+	do_bool_or_like(ctx, qopt);
 	RETURN(ctx.postlist());
     }
 
+    OrContext ctx(qopt, subqueries.size());
+    do_or_like(ctx, qopt, factor);
     // We currently assume wqf is 1 for calculating the OP_MAX's weight
     // since conceptually the OP_MAX is one "virtual" term.  If we were
     // to combine multiple occurrences of the same OP_MAX expansion into
@@ -1906,13 +1995,13 @@ QueryBranch::do_max(QueryOptimiser * qopt, double factor) const
 }
 
 Xapian::Query::op
-QueryBranch::get_type() const XAPIAN_NOEXCEPT
+QueryBranch::get_type() const noexcept
 {
     return get_op();
 }
 
 size_t
-QueryBranch::get_num_subqueries() const XAPIAN_NOEXCEPT
+QueryBranch::get_num_subqueries() const noexcept
 {
     return subqueries.size();
 }
@@ -1972,15 +2061,15 @@ void QueryTerm::serialise(string & result) const
 	} else {
 	    // Weird mutant versions of MatchAll
 	    result += '\x0e';
-	    result += encode_length(wqf);
-	    result += encode_length(pos);
+	    pack_uint(result, wqf);
+	    pack_uint(result, pos);
 	}
     } else if (wqf == 1) {
 	if (pos == 0) {
 	    // Single occurrence free-text term without position set.
 	    if (len >= 16) {
 		result += static_cast<char>(0x40 | 0x10);
-		result += encode_length(term.size() - 16);
+		pack_uint(result, term.size() - 16);
 	    } else {
 		result += static_cast<char>(0x40 | 0x10 | len);
 	    }
@@ -1989,31 +2078,31 @@ void QueryTerm::serialise(string & result) const
 	    // Single occurrence free-text term with position set.
 	    if (len >= 16) {
 		result += static_cast<char>(0x40 | 0x20);
-		result += encode_length(term.size() - 16);
+		pack_uint(result, term.size() - 16);
 	    } else {
 		result += static_cast<char>(0x40 | 0x20 | len);
 	    }
 	    result += term;
-	    result += encode_length(pos);
+	    pack_uint(result, pos);
 	}
     } else if (wqf > 1 || pos > 0) {
 	// General case.
 	if (len >= 16) {
 	    result += static_cast<char>(0x40 | 0x30);
-	    result += encode_length(term.size() - 16);
+	    pack_uint(result, term.size() - 16);
 	} else if (len) {
 	    result += static_cast<char>(0x40 | 0x30 | len);
 	}
 	result += term;
-	result += encode_length(wqf);
-	result += encode_length(pos);
+	pack_uint(result, wqf);
+	pack_uint(result, pos);
     } else {
 	// Typical boolean term.
 	AssertEq(wqf, 0);
 	AssertEq(pos, 0);
 	if (len >= 16) {
 	    result += static_cast<char>(0x40);
-	    result += encode_length(term.size() - 16);
+	    pack_uint(result, term.size() - 16);
 	} else {
 	    result += static_cast<char>(0x40 | len);
 	}
@@ -2024,30 +2113,17 @@ void QueryTerm::serialise(string & result) const
 void QueryPostingSource::serialise(string & result) const
 {
     result += static_cast<char>(0x0c);
-
-    const string & n = source->name();
-    result += encode_length(n.size());
-    result += n;
-
-    const string & s = source->serialise();
-    result += encode_length(s.size());
-    result += s;
+    pack_string(result, source->name());
+    pack_string(result, source->serialise());
 }
 
 void QueryScaleWeight::serialise(string & result) const
 {
     Assert(subquery.internal.get());
-    const string & s = serialise_double(scale_factor);
     result += '\x0d';
-    result += s;
+    result += serialise_double(scale_factor);
     subquery.internal->serialise(result);
 }
-
-struct is_matchnothing {
-    bool operator()(const Xapian::Query & q) const {
-	return q.internal.get() == NULL;
-    }
-};
 
 void
 QueryAndLike::add_subquery(const Xapian::Query & subquery)
@@ -2189,34 +2265,53 @@ PostList*
 QueryOr::postlist(QueryOptimiser * qopt, double factor) const
 {
     LOGCALL(QUERY, PostList*, "QueryOr::postlist", qopt | factor);
+    if (factor == 0.0) {
+	BoolOrContext ctx(qopt, subqueries.size());
+	do_bool_or_like(ctx, qopt);
+	RETURN(ctx.postlist());
+    }
     OrContext ctx(qopt, subqueries.size());
     do_or_like(ctx, qopt, factor);
     RETURN(ctx.postlist());
 }
 
 void
-QueryOr::postlist_sub_or_like(OrContext& ctx, QueryOptimiser * qopt, double factor) const
+QueryOr::postlist_sub_or_like(OrContext& ctx, QueryOptimiser* qopt,
+			      double factor, bool keep_zero_weight) const
 {
-    do_or_like(ctx, qopt, factor);
+    do_or_like(ctx, qopt, factor, 0, 0, keep_zero_weight);
+}
+
+void
+QueryOr::postlist_sub_bool_or_like(BoolOrContext& ctx,
+				   QueryOptimiser* qopt) const
+{
+    do_bool_or_like(ctx, qopt);
 }
 
 PostList*
 QueryAndNot::postlist(QueryOptimiser * qopt, double factor) const
 {
     LOGCALL(QUERY, PostList*, "QueryAndNot::postlist", qopt | factor);
-    // FIXME: Combine and-like side with and-like stuff above.
-    unique_ptr<PostList> l(subqueries[0].internal->postlist(qopt, factor));
-    if (!l.get()) {
+    AndContext ctx(qopt, 1);
+    if (!QueryAndNot::postlist_sub_and_like(ctx, qopt, factor)) {
 	RETURN(NULL);
     }
-    OrContext ctx(qopt, subqueries.size() - 1);
-    do_or_like(ctx, qopt, 0.0, 0, 1);
-    unique_ptr<PostList> r(ctx.postlist());
-    if (!r.get()) {
-	RETURN(l.release());
-    }
-    RETURN(new AndNotPostList(l.release(), r.release(),
-			      qopt->matcher, qopt->db_size));
+    RETURN(ctx.postlist());
+}
+
+bool
+QueryAndNot::postlist_sub_and_like(AndContext& ctx,
+				   QueryOptimiser* qopt,
+				   double factor) const
+{
+    // This invariant should be established by QueryAndNot::done() with
+    // assistance from QueryAndNot::add_subquery().
+    Assert(subqueries[0].internal.get());
+    if (!subqueries[0].internal->postlist_sub_and_like(ctx, qopt, factor))
+	return false;
+    do_bool_or_like(ctx.get_not_ctx(subqueries.size() - 1), qopt, 1);
+    return true;
 }
 
 PostList*
@@ -2243,38 +2338,49 @@ PostList*
 QueryAndMaybe::postlist(QueryOptimiser * qopt, double factor) const
 {
     LOGCALL(QUERY, PostList*, "QueryAndMaybe::postlist", qopt | factor);
-    // FIXME: Combine and-like side with and-like stuff above.
-    unique_ptr<PostList> l(subqueries[0].internal->postlist(qopt, factor));
-    if (!l.get()) {
+    AndContext ctx(qopt, 1);
+    if (!QueryAndMaybe::postlist_sub_and_like(ctx, qopt, factor)) {
 	RETURN(NULL);
     }
-    if (factor == 0.0) {
-	// An unweighted OP_AND_MAYBE can be replaced with its left branch.
-	RETURN(l.release());
+    RETURN(ctx.postlist());
+}
+
+bool
+QueryAndMaybe::postlist_sub_and_like(AndContext& ctx,
+				     QueryOptimiser* qopt,
+				     double factor) const
+{
+    // This invariant should be established by QueryAndMaybe::done() with
+    // assistance from QueryAndMaybe::add_subquery().
+    Assert(subqueries[0].internal.get());
+    if (!subqueries[0].internal->postlist_sub_and_like(ctx, qopt, factor))
+	return false;
+    // We only need to consider the right branch or branches if we're weighted
+    // - an unweighted OP_AND_MAYBE can be replaced with its left branch.
+    if (factor != 0.0) {
+	// Only keep zero-weight subqueries if we need their wdf because they're
+	// underneath a compound weight.
+	OrContext& maybe_ctx = ctx.get_maybe_ctx(subqueries.size() - 1);
+	bool need_wdf = qopt->need_wdf_for_compound_weight();
+	do_or_like(maybe_ctx, qopt, factor, 0, 1, need_wdf);
     }
-    OrContext ctx(qopt, subqueries.size() - 1);
-    do_or_like(ctx, qopt, factor, 0, 1);
-    unique_ptr<PostList> r(ctx.postlist());
-    if (!r.get()) {
-	RETURN(l.release());
-    }
-    RETURN(new AndMaybePostList(l.release(), r.release(),
-				qopt->matcher, qopt->db_size));
+    return true;
 }
 
 PostList*
 QueryFilter::postlist(QueryOptimiser * qopt, double factor) const
 {
     LOGCALL(QUERY, PostList*, "QueryFilter::postlist", qopt | factor);
-    // FIXME: Combine and-like stuff, like QueryOptimiser.
-    AssertEq(subqueries.size(), 2);
-    PostList * pls[2];
-    unique_ptr<PostList> l(subqueries[0].internal->postlist(qopt, factor));
-    if (!l.get()) RETURN(NULL);
-    pls[1] = subqueries[1].internal->postlist(qopt, 0.0);
-    if (!pls[1]) RETURN(NULL);
-    pls[0] = l.release();
-    RETURN(new MultiAndPostList(pls, pls + 2, qopt->matcher, qopt->db_size));
+    AndContext ctx(qopt, subqueries.size());
+    for (const auto& subq : subqueries) {
+	// MatchNothing subqueries should have been removed by done().
+	Assert(subq.internal.get());
+	if (!subq.internal->postlist_sub_and_like(ctx, qopt, factor))
+	    break;
+	// Second and subsequent subqueries are unweighted.
+	factor = 0.0;
+    }
+    RETURN(ctx.postlist());
 }
 
 bool
@@ -2295,11 +2401,6 @@ QueryFilter::postlist_sub_and_like(AndContext& ctx, QueryOptimiser * qopt, doubl
 bool
 QueryWindowed::postlist_windowed(Query::op op, AndContext& ctx, QueryOptimiser * qopt, double factor) const
 {
-    if (!qopt->full_db_has_positions) {
-	// No positional data anywhere, so just handle as AND.
-	return QueryAndLike::postlist_sub_and_like(ctx, qopt, factor);
-    }
-
     if (!qopt->db.has_positions()) {
 	// No positions in this subdatabase so this matches nothing, which
 	// means the whole andcontext matches nothing.
@@ -2320,10 +2421,10 @@ QueryWindowed::postlist_windowed(Query::op op, AndContext& ctx, QueryOptimiser *
     for (i = subqueries.begin(); i != subqueries.end(); ++i) {
 	// MatchNothing subqueries should have been removed by done().
 	Assert((*i).internal.get());
-	bool is_term = ((*i).internal->get_type() == Query::LEAF_TERM);
 	PostList* pl = (*i).internal->postlist(qopt, factor);
-	if (pl && !is_term)
+	if (pl && (*i).internal->get_type() != Query::LEAF_TERM) {
 	    pl = new OrPosPostList(pl);
+	}
 	result = ctx.add_postlist(pl);
 	if (!result) {
 	    if (factor == 0.0) break;
@@ -2333,7 +2434,7 @@ QueryWindowed::postlist_windowed(Query::op op, AndContext& ctx, QueryOptimiser *
 		// MatchNothing subqueries should have been removed by done().
 		// FIXME: Can we handle this more gracefully?
 		Assert((*i).internal.get());
-		delete (*i).internal->postlist(qopt, factor);
+		qopt->destroy_postlist((*i).internal->postlist(qopt, factor));
 		++i;
 	    }
 	    break;
@@ -2372,9 +2473,10 @@ QueryEliteSet::postlist(QueryOptimiser * qopt, double factor) const
 }
 
 void
-QueryEliteSet::postlist_sub_or_like(OrContext& ctx, QueryOptimiser * qopt, double factor) const
+QueryEliteSet::postlist_sub_or_like(OrContext& ctx, QueryOptimiser* qopt,
+				    double factor, bool keep_zero_weight) const
 {
-    do_or_like(ctx, qopt, factor, set_size);
+    do_or_like(ctx, qopt, factor, set_size, 0, keep_zero_weight);
 }
 
 PostList*
@@ -2577,7 +2679,7 @@ QueryMax::get_description() const
 }
 
 Xapian::Query::op
-QueryInvalid::get_type() const XAPIAN_NOEXCEPT
+QueryInvalid::get_type() const noexcept
 {
     return Xapian::Query::OP_INVALID;
 }

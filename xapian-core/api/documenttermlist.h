@@ -1,4 +1,4 @@
-/** @file documenttermlist.h
+/** @file
  * @brief Iteration over terms in a document
  */
 /* Copyright 2017 Olly Betts
@@ -28,7 +28,7 @@
 #include "omassert.h"
 
 /// Iteration over terms in a document.
-class DocumentTermList : public TermList {
+class DocumentTermList final : public TermList {
     /// Don't allow assignment.
     void operator=(const DocumentTermList&) = delete;
 

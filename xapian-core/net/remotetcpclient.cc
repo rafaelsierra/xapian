@@ -1,4 +1,4 @@
-/** @file remotetcpclient.cc
+/** @file
  *  @brief TCP/IP socket based RemoteDatabase implementation
  */
 /* Copyright (C) 2008,2010 Olly Betts
@@ -58,5 +58,8 @@ RemoteTcpClient::get_tcpcontext(const string & hostname, int port)
 
 RemoteTcpClient::~RemoteTcpClient()
 {
-    do_close();
+    try {
+	do_close();
+    } catch (...) {
+    }
 }

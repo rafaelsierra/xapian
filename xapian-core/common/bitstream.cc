@@ -1,4 +1,4 @@
-/** @file bitstream.cc
+/** @file
  * @brief Classes to encode/decode a bitstream.
  */
 /* Copyright (C) 2004,2005,2006,2008,2013,2014,2016,2017,2018 Olly Betts
@@ -152,7 +152,8 @@ BitWriter::encode(Xapian::termpos value, Xapian::termpos outof)
 }
 
 void
-BitWriter::encode_interpolative(const Xapian::VecCOW<Xapian::termpos> &pos, int j, int k)
+BitWriter::encode_interpolative(const Xapian::VecCOW<Xapian::termpos>& pos,
+				int j, int k)
 {
     // "Interpolative code" - for an algorithm description, see "Managing
     // Gigabytes" - pages 126-127 in the second edition.  You can probably

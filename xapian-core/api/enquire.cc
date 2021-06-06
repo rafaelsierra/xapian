@@ -1,4 +1,4 @@
-/** @file enquire.cc
+/** @file
  * @brief Xapian::Enquire class
  */
 /* Copyright (C) 2009,2017 Olly Betts
@@ -295,7 +295,6 @@ Enquire::Internal::get_mset(doccount first,
 		    rset,
 		    *stats,
 		    *weight,
-		    (sort_functor.get() != NULL),
 		    (mdecider != NULL),
 		    collapse_key,
 		    collapse_max,

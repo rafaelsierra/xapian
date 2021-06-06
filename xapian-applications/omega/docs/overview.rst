@@ -242,9 +242,10 @@ sites '/products' and '/products/large', or similar.)
 
 omindex has built-in support for indexing HTML, PHP, text files, CSV
 (Comma-Separated Values) files, SVG, Atom feeds, and AbiWord documents.  It can
-also index a number of other formats using external programs.  Filter programs
-are run with CPU, time and memory limits to prevent a runaway filter from
-blocking indexing of other files.
+also index a number of other formats using external programs or libraries.  Filter programs and libraries
+are run with CPU, time and memory limits to prevent them from
+blocking indexing of other files or crashing omindex. If for one format both
+options are available, libraries would be preferred because they have a better runtime behaviour.
 
 The way omindex decides how to index a file is based around MIME content-types.
 First of all omindex will look up a file's extension in its extension to MIME
@@ -259,9 +260,10 @@ other filters too - see below):
 * text files (.txt, .text)
 * SVG (.svg)
 * CSV (Comma-Separated Values) files (.csv)
-* PDF (.pdf) if pdftotext is available (comes with poppler or xpdf)
+* PDF (.pdf) if pdftotext (comes with poppler or xpdf) or libpoppler
+  (in particular libpoppler-cpp-dev) are available
 * PostScript (.ps, .eps, .ai) if ps2pdf (from ghostscript) and pdftotext (comes
-  with poppler or xpdf) are available
+  with poppler or xpdf) or libpoppler (in particular libpoppler-cpp-dev) are available
 * OpenOffice/StarOffice documents (.sxc, .stc, .sxd, .std, .sxi, .sti, .sxm,
   .sxw, .sxg, .stw) if unzip is available
 * OpenDocument format documents (.odt, .ods, .odp, .odg, .odc, .odf, .odb,
@@ -284,12 +286,12 @@ other filters too - see below):
 * MS Publisher documents (.pub) if pub2xhtml is available (comes with libmspub)
 * MS Visio documents (.vsd, .vss, .vst, .vsw, .vsdx, .vssx, .vstx, .vsdm,
   .vssm, .vstm) if vsd2xhtml is available (comes with libvisio)
-* Apple Keynote documents (.key, .kth, .apxl) if key2text is available (comes
-  with libetonyek)
-* Apple Numbers documents (.numbers) if numbers2text is available (comes with
-  libetonyek)
-* Apple Pages documents (.pages) if pages2text is available (comes with
-  libetonyek)
+* Apple Keynote documents (.key, .kth, .apxl) if libetonyek is available (it is
+  also possible to use key2text as an external filter)
+* Apple Numbers documents (.numbers) if libetonyek is available (it is
+  also possible to use numbers2text as an external filter)
+* Apple Pages documents (.pages) if libetonyek is available (it is
+  also possible to use pages2text as an external filter)
 * AbiWord documents (.abw)
 * Compressed AbiWord documents (.zabw)
 * Rich Text Format documents (.rtf) if unrtf is available
@@ -299,15 +301,22 @@ other filters too - see below):
 * Markdown (.md, .markdown) if markdown is available
 * TeX DVI files (.dvi) if catdvi is available
 * DjVu files (.djv, .djvu) if djvutxt is available
-* XPS files (.xps) if unzip is available
+* OpenXPS and XPS files (.oxps, .xps) if unzip is available
 * Debian packages (.deb, .udeb) if dpkg-deb is available
 * RPM packages (.rpm) if rpm is available
 * Atom feeds (.atom)
 * MAFF (.maff) if unzip is available
 * MHTML (.mhtml, .mht) if perl with MIME::Tools is available
-* MIME email messages (.eml) and USENET articles if perl with MIME::Tools and
+* MIME email messages (.eml) and USENET articles if gmime 2.6 or perl with MIME::Tools and
   HTML::Parser is available
 * vCard files (.vcf, .vcard) if perl with Text::vCard is available
+* FictionBook v.2 files (.fb2) if libe-book is available
+* QiOO (mobile format, for java-enabled cellphones) files (.jar) if libe-book is available
+* TCR (simple compressed text format) files (.tcr) if libe-book is available
+* eReader files (.pdb) if libe-book is available
+* Sony eBook files (.lrf) if libe-book is available
+* Image files that contain text (.png, .jpg, .jpeg, .jfif, .jpe, .webp, .tif, .tiff,
+  .pbm, .gif, .ppm, .pgm) if libtesseract-dev is available.
 
 If you have additional extensions that represent one of these types, you can
 add an additional MIME mapping using the ``--mime-type`` option.  For

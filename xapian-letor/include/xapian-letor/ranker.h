@@ -1,4 +1,4 @@
-/** @file ranker.h
+/** @file
  * @brief Ranker class - weighting scheme based on Learning to Rank
  */
 /* Copyright (C) 2012 Parth Gupta
@@ -20,17 +20,17 @@
  * USA
  */
 
-#ifndef RANKER_H
-#define RANKER_H
+#ifndef XAPIAN_INCLUDED_RANKER_H
+#define XAPIAN_INCLUDED_RANKER_H
 
 #include <xapian.h>
 #include <xapian/intrusive_ptr.h>
 #include <xapian/types.h>
 #include <xapian/visibility.h>
 
-#include "featurelist.h"
-#include "featurevector.h"
-#include "letor_error.h"
+#include <xapian-letor/featurelist.h>
+#include <xapian-letor/featurevector.h>
+#include <xapian-letor/letor_error.h>
 
 #include <string>
 #include <vector>
@@ -247,7 +247,7 @@ class XAPIAN_VISIBILITY_DEFAULT Ranker : public Xapian::Internal::intrusive_base
 class XAPIAN_VISIBILITY_DEFAULT ListNETRanker: public Ranker {
     /// Ranker parameters
     std::vector<double> parameters;
-    /// Learning rate (Default is 0.0001)
+    /// Learning rate (Default is 0.001)
     double learning_rate;
     /// Number of iterations (Default is 15)
     int iterations;
@@ -296,11 +296,11 @@ class XAPIAN_VISIBILITY_DEFAULT ListNETRanker: public Ranker {
   public:
     /* Construct ListNet instance
      * @param learn_rate       Learning rate
-     * @param num_interations  Number of iterations
+     * @param num_iterations   Number of iterations
      */
     explicit ListNETRanker(double learn_rate = 0.001,
-			    int num_interations = 15)
-	: learning_rate(learn_rate), iterations(num_interations) { }
+			   int num_iterations = 15)
+	: learning_rate(learn_rate), iterations(num_iterations) { }
 
     /// Destructor
     ~ListNETRanker();
@@ -399,11 +399,11 @@ class XAPIAN_VISIBILITY_DEFAULT ListMLERanker : public Ranker {
   public:
     /* Construct ListMLE instance
      * @param learn_rate       Learning rate (Default is 0.001)
-     * @param num_interations  Number of iterations (Default is 10)
+     * @param num_iterations   Number of iterations (Default is 10)
      */
     explicit ListMLERanker(double learn_rate = 0.001,
-			    int num_interations = 10)
-	: learning_rate(learn_rate), iterations(num_interations) { }
+			   int num_iterations = 10)
+	: learning_rate(learn_rate), iterations(num_iterations) { }
 
     /// Destructor
     ~ListMLERanker();
@@ -411,4 +411,4 @@ class XAPIAN_VISIBILITY_DEFAULT ListMLERanker : public Ranker {
 
 }
 
-#endif /* RANKER_H */
+#endif /* XAPIAN_INCLUDED_RANKER_H */

@@ -1,4 +1,4 @@
-/** @file multixorpostlist.h
+/** @file
  * @brief N-way XOR postlist
  */
 /* Copyright (C) 2007,2009,2010,2011,2012,2017 Olly Betts
@@ -22,10 +22,10 @@
 #ifndef XAPIAN_INCLUDED_MULTIXORPOSTLIST_H
 #define XAPIAN_INCLUDED_MULTIXORPOSTLIST_H
 
-#include "api/postlist.h"
-#include <algorithm>
-
+#include "backends/postlist.h"
 #include "postlisttree.h"
+
+#include <algorithm>
 
 /// N-way XOR postlist.
 class MultiXorPostList : public PostList {
@@ -88,7 +88,8 @@ class MultiXorPostList : public PostList {
     Xapian::docid get_docid() const;
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
 
     bool at_end() const;
 

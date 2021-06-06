@@ -1,4 +1,4 @@
-/** @file msetinternal.h
+/** @file
  * @brief Xapian::MSet internals
  */
 /* Copyright 2016,2017 Olly Betts
@@ -131,7 +131,7 @@ class MSet::Internal : public Xapian::Internal::intrusive_base {
 
     void unshard_docids(Xapian::doccount shard, Xapian::doccount n_shards);
 
-    void merge_stats(const Internal* o);
+    void merge_stats(const Internal* o, bool collapsing);
 
     std::string snippet(const std::string & text, size_t length,
 			const Xapian::Stem & stemmer,

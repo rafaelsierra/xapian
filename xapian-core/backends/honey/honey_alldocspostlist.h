@@ -1,4 +1,4 @@
-/** @file honey_alldocspostlist.h
+/** @file
  * @brief A PostList which iterates over all documents in a HoneyDatabase.
  */
 /* Copyright (C) 2006,2007,2008,2009,2017,2018 Olly Betts
@@ -26,7 +26,7 @@
 # error config.h must be included first in each C++ source file
 #endif
 
-#include "api/leafpostlist.h"
+#include "backends/leafpostlist.h"
 #include "honey_defs.h"
 #include "pack.h"
 #include "wordaccess.h"
@@ -88,8 +88,8 @@ docid_from_key(const std::string& key)
 }
 
 class DocLenChunkReader {
-    unsigned const char *p;
-    unsigned const char *end;
+    unsigned const char* p;
+    unsigned const char* end;
 
     Xapian::docid did;
 

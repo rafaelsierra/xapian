@@ -284,44 +284,43 @@ XAPIAN_LIBS=
 AC_SUBST([XAPIAN_LDFLAGS])
 AC_SUBST([XAPIAN_LIBS])
 
-AC_DEFUN([XAPIAN_TEST_LINKER_FLAG],
+AC_DEFUN([XAPIAN_TEST_FLAGS_],
   [
-  AC_MSG_CHECKING([for $CXX -Wl,$1])
-  AC_CACHE_VAL([xo_cv_ldflag_$2],
+  m4_define([cachevar],
+	    [xo_cv_]m4_tolower(m4_bpatsubst([$1][_$3], [[^A-Za-z0-9]], [_])))
+  AC_CACHE_CHECK([for $CXX with $3 in $1], cachevar,
     [
-    save_LDFLAGS=$LDFLAGS
-    LDFLAGS="$LDFLAGS -Wl,$1"
-    flag=$1
-    AC_LINK_IFELSE([AC_LANG_PROGRAM([], [])],
-      [xo_cv_ldflag_$2=yes
-      $3],
-      [xo_cv_ldflag_$2=no
-      $4])
-    LDFLAGS=$save_LDFLAGS
+    XTF_save_$1=${$1}
+    $1="${$1} $3"
+    $2([AC_LANG_PROGRAM([], [])],
+      [cachevar=yes
+       $1=$XTF_save_$1
+       $4="${$4} $3"
+       $5],
+      [cachevar=no
+       $1=$XTF_save_$1
+       $6])
     ])
-  AC_MSG_RESULT([$xo_cv_ldflag_$2])
   ])
 
-dnl Test if the compiler works with $1 added to CXXFLAGS; if it does, add $1 to
+dnl Test if compiling works with $1 added to CXXFLAGS; if it does, add $1 to
 dnl variable $2.  If the test passes, also do $3; if it fails, also do $4.
 AC_DEFUN([XAPIAN_TEST_CXXFLAGS],
-  [
-  XTC_save_CXXFLAGS=$CXXFLAGS
-  CXXFLAGS="$CXXFLAGS $1"
-  AC_TRY_COMPILE([], [],
-		 [CXXFLAGS=$XTC_save_CXXFLAGS
-		  $2="${$2} $1"
-		  $3],
-		 [CXXFLAGS=$XTC_save_CXXFLAGS
-		  $4])
-  ])
+  [XAPIAN_TEST_FLAGS_([CXXFLAGS], [AC_COMPILE_IFELSE], [$1], [$2], [$3], [$4])])
+
+dnl Test if linking works with $1 added to LDFLAGS; if it does, add $1 to
+dnl variable $2.  If the test passes, also do $3; if it fails, also do $4.
+AC_DEFUN([XAPIAN_TEST_LDFLAGS],
+  [XAPIAN_TEST_FLAGS_([LDFLAGS], [AC_LINK_IFELSE], [$1], [$2], [$3], [$4])])
 
 ldflags=
 if test yesyes = "$GXX$enable_shared" ; then
   case $host_os in
     *mingw* | *cygwin*)
-      XAPIAN_TEST_LINKER_FLAG([--enable-runtime-pseudo-reloc], [enable_runtime_pseudo_reloc],
-	[ldflags="-Wl,$flag"],
+      XAPIAN_TEST_LDFLAGS(
+	[-Wl,--enable-runtime-pseudo-reloc],
+	[ldflags],
+	[],
 	[
 	dnl Can't use AC_DISABLE_SHARED after AC_PROG_LIBTOOL, but
 	dnl this test needs to be after AC_PROG_LIBTOOL, so we can't
@@ -399,16 +398,16 @@ using namespace std;])
 dnl GCC provides __builtin_exp10() (but notably clang doesn't currently).
 dnl On mingw, __builtin_exp10() causes GCC to generate a call to exp10() which
 dnl then fails to link, so perform a link check here to catch that.
-AC_CACHE_CHECK([for __builtin_exp10], ac_cv_link___builtin_exp10, [
+AC_CACHE_CHECK([for __builtin_exp10], xo_cv_link___builtin_exp10, [
   AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #include <cstdio>
 #include <ctime>
 using namespace std;]],
     [[printf("%f", __builtin_exp10(double(time(NULL)*1e-8)));]])],
-    [ac_cv_link___builtin_exp10=yes],
-    [ac_cv_link___builtin_exp10=no])
+    [xo_cv_link___builtin_exp10=yes],
+    [xo_cv_link___builtin_exp10=no])
 ])
-if test $ac_cv_link___builtin_exp10 = yes ; then
+if test $xo_cv_link___builtin_exp10 = yes ; then
   AC_DEFINE([HAVE___BUILTIN_EXP10], [1], [Define to 1 if you have the '__builtin_exp10' function.])
 fi
 
@@ -419,7 +418,10 @@ AC_MSG_CHECKING([if RTTI is supported])
 save_CXXFLAGS=$CXXFLAGS
 dnl xlC issues a warning for typeid() being used without RTTI being enabled,
 dnl so for this test we pass the xlC option to make that warning into an error.
-XAPIAN_TEST_CXXFLAGS([-qhaltonmsg=1540-2412], [CXXFLAGS])
+CXXFLAGS="$CXXFLAGS -qhaltonmsg=1540-2412"
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [])],
+      [],
+      [CXXFLAGS=$save_CXXFLAGS])
 AC_TRY_COMPILE([
 #include <exception>
 #include <typeinfo>],
@@ -596,12 +598,13 @@ AC_MSG_RESULT([$INT64_T])
 
 dnl Check for perl (needed to generate some sources and documentation).
 AC_PATH_PROG([PERL], [perl], [])
+AC_ARG_VAR([PERL], [Perl interpreter])
 if test x$USE_MAINTAINER_MODE = xyes; then
   test -z "$PERL" && AC_MSG_ERROR([perl is required in maintainer mode])
 fi
 
 AC_ARG_ENABLE([64bit_docid],
-  [AS_HELP_STRING([--enable-64bit-docid], [enable 64bit docid [default=no]])],
+  [AS_HELP_STRING([--enable-64bit-docid], [enable 64bit docid])],
   [case ${enableval} in
     yes|no) ;;
   *) AC_MSG_ERROR([bad value ${enableval} for --enable-64bit-docid]) ;;
@@ -609,7 +612,7 @@ AC_ARG_ENABLE([64bit_docid],
   [enable_64bit_docid=no])
 
 AC_ARG_ENABLE([64bit_termcount],
-  [AS_HELP_STRING([--enable-64bit-termcount], [enable 64bit termcount [default=no]])],
+  [AS_HELP_STRING([--enable-64bit-termcount], [enable 64bit termcount])],
   [case ${enableval} in
     yes|no) ;;
   *) AC_MSG_ERROR([bad value ${enableval} for --enable-64bit-termcount]) ;;
@@ -617,7 +620,7 @@ AC_ARG_ENABLE([64bit_termcount],
   [enable_64bit_termcount=no])
 
 AC_ARG_ENABLE([64bit_termpos],
-  [AS_HELP_STRING([--enable-64bit-termpos], [enable 64bit termpos [default=no]])],
+  [AS_HELP_STRING([--enable-64bit-termpos], [enable 64bit termpos])],
   [case ${enableval} in
     yes|no) ;;
   *) AC_MSG_ERROR([bad value ${enableval} for --enable-64bit-termpos]) ;;
@@ -637,27 +640,32 @@ AM_CONDITIONAL([MAINTAINER_NO_DOCS], [test x"$USE_MAINTAINER_MODE$enable_documen
 if test x"$enable_documentation" = xyes ; then
   dnl Checks for dot.  (Diagrams in the documentation)
   AC_PATH_PROG([DOT], [dot])
+  AC_ARG_VAR([DOT], [dot from graphviz])
   test -z "$DOT" && AC_MSG_ERROR([dot (part of the graphviz package) is required to build documentation])
   DOXYGEN_DOT_PATH=`echo "$DOT" | sed 's!/dot$!!'`
   AC_SUBST([DOXYGEN_DOT_PATH])
 
   dnl Check for doxygen. (Needed to make some more of the documentation)
   AC_PATH_PROG([DOXYGEN], [doxygen], [])
+  AC_ARG_VAR([DOXYGEN], [Doxygen documentation system])
   test -z "$DOXYGEN" && AC_MSG_ERROR([doxygen is required to build documentation])
 
   dnl Check for help2man. (Needed to make man pages from "--help" output).
   AC_PATH_PROG([HELP2MAN], [help2man], [])
+  AC_ARG_VAR([HELP2MAN], [help2man man page generator])
   test -z "$HELP2MAN" && AC_MSG_ERROR([help2man is required to build documentation])
 
   dnl Check for rst2html. (Needed to make HTML from reStructuredText format)
   dnl Also look for rst2html.py, which archlinux reportedly installs it as.
   AC_PATH_PROGS([RST2HTML], [rst2html rst2html.py], [])
+  AC_ARG_VAR([RST2HTML], [reST to HTML convertor])
   test -z "$RST2HTML" && AC_MSG_ERROR([rst2html is required to build documentation (try package python-docutils)])
 
   dnl Check for pngcrush, which we optionally use to reduce the size of the
   dnl PNG files which doxygen generates.  We can get by without it, so don't
   dnl fail here if it's not found.
   AC_PATH_PROG([PNGCRUSH], [pngcrush], [])
+  AC_ARG_VAR([PNGCRUSH], [PNG optimiser])
 fi
 
 dnl Checks for header files.
@@ -684,6 +692,7 @@ esac
 
 if test -n "$use_valgrind_if_non_empty" ; then
   AC_PATH_PROG([VALGRIND], [valgrind], [])
+  AC_ARG_VAR([VALGRIND], [debugging tool (optionally used by test harness)])
   if test -n "$VALGRIND" ; then
     dnl Check that the installed valgrind version works, and supports the
     dnl options we use.  This means we won't try to use valgrind < 3.3.0
@@ -727,13 +736,13 @@ dnl If EATMYDATA is set to an empty value, then skip this check and don't use
 dnl eatmydata.
 if test -n "${EATMYDATA-unset}" ; then
   AC_PATH_PROG([EATMYDATA], [eatmydata], [])
+  AC_ARG_VAR([EATMYDATA], [wrapper to disable fsync (optionally used by test harness)])
 fi
 
 dnl Checks for library functions.
-AC_FUNC_MEMCMP
 AC_FUNC_STRERROR_R
 
-AC_CACHE_CHECK([for sys_errlist and sys_nerr], ac_cv_sys_errlist_and_sys_nerr, [
+AC_CACHE_CHECK([for sys_errlist and sys_nerr], xo_cv_sys_errlist_and_sys_nerr, [
   AC_LINK_IFELSE([AC_LANG_PROGRAM(
 dnl On Linux, sys_errlist and sys_nerr need <stdio.h>, though the man page
 dnl says <errno.h>.  The man page seems to match other platforms such as
@@ -741,94 +750,54 @@ dnl NetBSD, so include both headers to ensure we get them.
 [[#include <errno.h>
 #include <stdio.h>]],
 [[  printf("%s", sys_errlist[sys_nerr - 1]);]])],
-  [ ac_cv_sys_errlist_and_sys_nerr=yes ],
-  [ ac_cv_sys_errlist_and_sys_nerr=no ])
+  [ xo_cv_sys_errlist_and_sys_nerr=yes ],
+  [ xo_cv_sys_errlist_and_sys_nerr=no ])
 ])
-if test "x$ac_cv_sys_errlist_and_sys_nerr" = "xyes" ; then
+if test "x$xo_cv_sys_errlist_and_sys_nerr" = "xyes" ; then
   AC_DEFINE([HAVE_SYS_ERRLIST_AND_SYS_NERR], [1],[Define if you have 'sys_errlist' and 'sys_nerr'])
 fi
 
-AC_CACHE_CHECK([for _sys_errlist and _sys_nerr], ac_cv__sys_errlist_and__sys_nerr, [
+AC_CACHE_CHECK([for _sys_errlist and _sys_nerr], xo_cv__sys_errlist_and__sys_nerr, [
   AC_LINK_IFELSE([AC_LANG_PROGRAM(
 [[#include <errno.h>
 #include <stdio.h>]],
 [[  printf("%s", _sys_errlist[_sys_nerr - 1]);]])],
-  [ ac_cv__sys_errlist_and__sys_nerr=yes ],
-  [ ac_cv__sys_errlist_and__sys_nerr=no
+  [ xo_cv__sys_errlist_and__sys_nerr=yes ],
+  [ xo_cv__sys_errlist_and__sys_nerr=no
   ])
 ])
-if test "x$ac_cv__sys_errlist_and__sys_nerr" = "xyes" ; then
+if test "x$xo_cv__sys_errlist_and__sys_nerr" = "xyes" ; then
   AC_DEFINE([HAVE__SYS_ERRLIST_AND__SYS_NERR], [1],[Define if you have '_sys_errlist' and '_sys_nerr'])
 fi
 
-dnl Check that snprintf actually works as it's meant to.
-dnl
-dnl Linux 'man snprintf' warns:
-dnl  Linux libc4.[45] does not have a snprintf, but provides a libbsd that
-dnl  contains an snprintf equivalent to sprintf, i.e., one that ignores the
-dnl  size argument.  Thus, the use of snprintf with early libc4 leads to
-dnl  serious security problems.
-dnl
-dnl It also warns that glibc < 2.0.6 (and presumably other pre-C99
-dnl implementations) return -1 when truncating so check that we get the
-dnl ISO C99 semantics for the returned length when truncating.  If we
-dnl have a working snprintf but with non-ISO return semantics, handle
-dnl that case separately as it may still be useful in many cases.
-dnl
 dnl mingw has _snprintf so check for that too.
-AC_MSG_CHECKING([for working ISO C99 conforming snprintf])
-ac_cv_func_snprintf_noniso=no
-for func in snprintf _snprintf ; do
-  AC_RUN_IFELSE([
-    AC_LANG_PROGRAM(
-      [[
+AC_MSG_CHECKING([for  snprintf])
+AC_CACHE_VAL([xo_cv_func_snprintf],
+  [
+  xo_cv_func_snprintf=no
+  for func in snprintf _snprintf ; do
+    AC_COMPILE_IFELSE([
+      AC_LANG_PROGRAM(
+	[[
 #include <cstdio>
-#include <cstring>
 using namespace std;
-      ]],
-      dnl Return different exit status for each error so we can see which
-      dnl check failed by consulting config.log.
-      [[
-	char buffer[4] = "abc";
-	int res1 = $func(buffer, 2, "%s", "XYZ");
-	if (memcmp(buffer, "X\0c", 4) != 0) return 2;
-	int res2 = $func(buffer, 2, "%x", 0x12);
-	if (memcmp(buffer, "1\0c", 4) != 0) return 3;
-	if (res1 == -1 && res2 == -1) return 15; /* Pre-ISO semantics. */
-	if (res1 != 3) return 4;
-	if (res2 != 2) return 5;
-      ]]
-    )],
-    [ac_cv_func_snprintf=$func;break],
-    [
-    if test 15no = "$?$ac_cv_func_snprintf_noniso" ; then
-      ac_cv_func_snprintf_noniso=$func
-    fi
-    ac_cv_func_snprintf=no
-    ],
-    [ac_cv_func_snprintf=unknown;break]
-  )
-done
-AC_MSG_RESULT([$ac_cv_func_snprintf])
-case $ac_cv_func_snprintf in
-  no)
-    AC_MSG_CHECKING([for working non-ISO C99 conforming snprintf])
-    AC_MSG_RESULT([$ac_cv_func_snprintf_noniso])
-    if test no != "$ac_cv_func_snprintf_noniso" ; then
-      AC_DEFINE_UNQUOTED([SNPRINTF], [$ac_cv_func_snprintf_noniso],
-	[Define to the name of a function implementing snprintf but not caring about ISO C99 return value semantics (if one exists)])
-    fi
-    ;;
-  unknown)
-    dnl be conservative when crosscompiling
-    ;;
-  *)
-    AC_DEFINE_UNQUOTED([SNPRINTF_ISO], [$ac_cv_func_snprintf],
-       [Define to the name of a function implementing snprintf with ISO C99 semantics (if one exists)])
-    AC_DEFINE_UNQUOTED([SNPRINTF], [$ac_cv_func_snprintf],
-       [Define to the name of a function implementing snprintf but not caring about ISO C99 return value semantics (if one exists)])
-    ;;
-esac
+	]],
+	[[
+	  char buffer[4] = "abc";
+	  int res = $func(buffer, 4, "%s", "XYZ");
+	  return res;
+	]]
+      )],
+      [xo_cv_func_snprintf=$func;break],
+      []
+    )
+  done
+  ])
+AC_MSG_RESULT([$xo_cv_func_snprintf])
+if test "$xo_cv_func_snprintf" != no ; then
+  AC_DEFINE_UNQUOTED([SNPRINTF], [$xo_cv_func_snprintf],
+     [Define to the name of a function implementing snprintf but not caring about ISO C99 return value semantics (if one exists)])
+fi
 
 dnl Check for ICU, which we can optionally use for CJK word tokenisation.
 AC_ARG_VAR([PKG_CONFIG], [Location of pkg-config])
@@ -950,7 +919,7 @@ case $enable_backend_glass$enable_backend_honey in
       ;;
     *)
       dnl Check for uuid/uuid.h (e2fsprogs/util-linux-ng) or uuid.h
-      dnl (FreeBSD/NetBSD).
+      dnl (FreeBSD/NetBSD/OpenBSD/AIX).
       AC_CHECK_HEADERS([uuid/uuid.h], [
 	dnl util-linux-ng's uuid/uuid.h found - check for uuid_generate in
 	dnl -luuid.
@@ -962,7 +931,8 @@ case $enable_backend_glass$enable_backend_honey in
 	  XAPIAN_LIBS="$XAPIAN_LIBS $LIBS"
 	fi
       ], [
-	dnl Try uuid.h as found on FreeBSD/NetBSD, with associated code in libc.
+	dnl Try uuid.h as found on FreeBSD/NetBSD/OpenBSD/AIX, with associated
+	dnl code in libc.
 	AC_CHECK_HEADERS([uuid.h], [
 	  dnl Check for uuid_create with no extra libraries required.
 	  AC_CHECK_FUNC([uuid_create], [], [
@@ -1052,7 +1022,7 @@ if test "$enable_backend_remote" = yes ; then
       ;;
   esac
 
-  TYPE_SOCKLEN_T
+  XAPIAN_TYPE_SOCKLEN_T
 fi
 
 if test "$win32_need_lws2_32" = 1 ; then
@@ -1312,21 +1282,10 @@ if test yes = "$GXX"; then
       dnl
       dnl -Wdouble-promotion was added in GCC 4.6.
       dnl
-      dnl -Winit-self was added in GCC 3.4, but for GCC < 4.7 g++ always
-      dnl warns for this case with -Wuninitialized (implied by -W).  We
-      dnl don't intend to use this idiom, so any instances are bugs we'd
-      dnl like to know about.
-      dnl
       dnl All the other options were supported by g++ 2.95.
-      AM_CXXFLAGS="$AM_CXXFLAGS -Wall -W -Wredundant-decls -Wpointer-arith -Wcast-qual -Wcast-align -Wformat-security -fno-gnu-keywords -Wundef -Woverloaded-virtual -Wstrict-null-sentinel -Wshadow -Wstrict-overflow=1 -Wlogical-op -Wmissing-declarations -Wdouble-promotion -Winit-self"
+      AM_CXXFLAGS="$AM_CXXFLAGS -Wall -W -Wredundant-decls -Wpointer-arith -Wcast-qual -Wcast-align -Wformat-security -fno-gnu-keywords -Wundef -Woverloaded-virtual -Wstrict-null-sentinel -Wshadow -Wstrict-overflow=1 -Wlogical-op -Wmissing-declarations -Wdouble-promotion"
 
       dnl FIXME:
-      dnl -Wconversion in older GCC versions is intended to help migration
-      dnl from K&R to ISO C, and isn't useful for us.  In 4.3 it was renamed
-      dnl to -Wtraditional-conversion and a new -Wconversion added which
-      dnl sounds useful but is a bit buggy currently.  So we should consider
-      dnl enabling -Wconversion once it is stabilised (GCC 4.4 or ...)
-      dnl
       dnl -Wold-style-cast is interesting, but triggers for macros from
       dnl system headers (e.g. FD_SET).  GCC 4.8 improved this by making
       dnl -ftrack-macro-expansion=2 the default, but we still see such
@@ -1397,27 +1356,38 @@ else
     dnl 20201 "Memory leak is detected" which triggers for "return new Foo;"!
     AM_CXXFLAGS="$AM_CXXFLAGS +w +wlint +W2340,2401,3348,4255,4273,20201" ;;
   */sunCC|*/CC)
-    dnl Sun's C++ compiler warns about functions failing to return a value even
-    dnl when the function ends with a "throw" statement.  That's just unhelpful
-    dnl noise, and adding a dummy "return" after "throw" seems a worse solution
-    dnl than simply disabling this warning - any genuinely missing return
-    dnl statements will get reported by compilers with superior warning
-    dnl machinery.
-    XAPIAN_TEST_CXXFLAGS([-erroff=voidretw], [AM_CXXFLAGS])
+    dnl Sun's C++ compiler.
+    dnl
+    dnl We use -errtags to report the tag for each warning emitted.
+    dnl
+    dnl We use -erroff to suppress some unhelpful warnings:
+    dnl
+    dnl oklambdaretmulti warns about a lambda with more than one return
+    dnl statement even if they all return the same type.
+    dnl
+    dnl voidretw warns about functions failing to return a value even when the
+    dnl function ends with a "throw" statement.  That's just unhelpful noise,
+    dnl and adding a dummy "return" after "throw" seems a worse solution than
+    dnl simply disabling this warning - any genuinely missing return statements
+    dnl will get reported by compilers with superior warning machinery.
+    XAPIAN_TEST_CXXFLAGS([-errtags -erroff=oklambdaretmulti,voidretw], [AM_CXXFLAGS])
     ;;
   esac
 fi
 
-XAPIAN_TEST_LINKER_FLAG([-Bsymbolic-functions], [symbolic_functions],
-  [XAPIAN_LDFLAGS="$XAPIAN_LDFLAGS $flag"])
+XAPIAN_TEST_LDFLAGS([-Wl,-Bsymbolic-functions], [XAPIAN_LDFLAGS])
+dnl Roughly equivalent Sun C++ option.
+XAPIAN_TEST_LDFLAGS([-xldscope=symbolic], [XAPIAN_LDFLAGS])
 
-FP_EXCESS_PRECISION=no
+dnl New in GCC 5.  Sort of like -Bsymbolic-functions, but for the compiler
+dnl rather than the linker.
+XAPIAN_TEST_LDFLAGS([-fno-semantic-interposition], [XAPIAN_LDFLAGS])
+
 AC_MSG_CHECKING([whether to use SSE instructions on x86])
 case $host_cpu in
   i*86)
     if test "$enable_sse" = no ; then
       AC_MSG_RESULT([no])
-      FP_EXCESS_PRECISION=yes
       if test yes = "$msvc"; then
 	dnl MSVC defaults to SSE2.
 	AM_CXXFLAGS="$AM_CXXFLAGS -arch:IA32"
@@ -1444,8 +1414,7 @@ case $host_cpu in
 	  [AC_MSG_RESULT([yes (configure with --disable-sse to disable)])
 	  AM_CXXFLAGS="$AM_CXXFLAGS -xarch=$enable_sse"]
 	  ,
-	  [AC_MSG_RESULT([don't know how to for compiler $CXX])
-	  FP_EXCESS_PRECISION=yes]
+	  [AC_MSG_RESULT([don't know how to for compiler $CXX])]
 	)
       fi
     fi
@@ -1453,7 +1422,6 @@ case $host_cpu in
   *)
     AC_MSG_RESULT([non-x86 arch ($host_cpu)]) ;;
 esac
-AC_SUBST([FP_EXCESS_PRECISION])
 
 AH_BOTTOM(
 [/* Disable stupid MSVC warnings. */
@@ -1470,6 +1438,11 @@ AH_BOTTOM(
 # define NOMINMAX
 #endif
 
+/* Tell zlib to include const in method signatures.  Define this in config.h
+ * to ensure it always gets defined before zlib.h is included.
+ */
+#define ZLIB_CONST
+
 /* Make the POSIX-like functions support large files.  MSVC needs this;
  * current mingw32 does too; mingw64 supports _FILE_OFFSET_BITS, which
  * AC_SYS_LARGEFILE should discover and enable automatically.
@@ -1483,43 +1456,53 @@ AH_BOTTOM(
 /* zlib.h uses off_t so we need to include it before we redefine off_t. */
 # include <zlib.h>
 
-// MSVC needs to call _stat64() instead of stat() and the struct which holds
-// the information is "struct _stat64" instead of "struct stat" so we just
-// use #define to replace both in one go.  We also want to use _fstat64()
-// instead of fstat() but in this case we can use a function-like macro.
-//
-// Mingw has _stat64() but unhelpfully for our purposes, it has an extra
-// underscore prefix on the struct name ("struct __stat64") so there we
-// target _stati64 instead.  This has 64-bit file size but the time_t size
-// is switchable.  We don't really care about file timestamps in the
-// library, so this should be fine.
-//
-// This hack is a problem is we ever want a method called "stat", or one called
-// fstat which takes 2 parameters, but we can probably live with these
-// limitations.
+// The default stat() and fstat() use 32-bit filesizes and time_t, so we need
+// to arrange to use 64-bit variants instead.
 
 # ifdef stat
-#  undef stat
+// Break #undef lines to stop config.status from commenting them out.
+#  undef \
+	stat
 # endif
+
+// This hack is a problem is we ever want a method called "stat".
+# ifdef _MSC_VER
+// MSVC needs to call _stat64() instead of stat() and the struct which holds
+// the information is `struct _stat64` instead of `struct stat` so we just
+// use #define to replace both in one go.
+#  define stat _stat64
+# else
+// Mingw32 has _stat64() but unhelpfully for our purposes, the struct is
+// called __stat64 (with an extra underscore).  We hack around this by
+// defining stat to __stat64 which sorts out the struct, and then using
+// a second macro to forward function-like uses of __stat64() to
+// _stat64().
+#  define stat __stat64
+#  define __stat64(PATH, STATBUF) _stat64((PATH), (STATBUF))
+# endif
+
+// We also want to use _fstat64() instead of fstat() but in this case we can
+// use a function-like macro, so we could have a method called fstat so long
+// as it didn't take two parameters.
 
 # ifdef fstat
-#  undef fstat
+// Break #undef lines to stop config.status from commenting them out.
+#  undef \
+	fstat
 # endif
 
-# ifdef _MSC_VER
-#  define stat _stat64
-#  define fstat(FD, BUF) _fstat64(FD, BUF)
-# else
-#  define stat _stati64
-#  define fstat(FD, BUF) _fstati64(FD, BUF)
-# endif
+# define fstat(FD, BUF) _fstat64(FD, BUF)
 
 # ifdef lseek
-#  undef lseek
+// Break #undef lines to stop config.status from commenting them out.
+#  undef \
+	lseek
 # endif
 
 # ifdef off_t
-#  undef off_t
+// Break #undef lines to stop config.status from commenting them out.
+#  undef \
+	off_t
 # endif
 
 # define lseek(FD, OFF, WHENCE) _lseeki64(FD, OFF, WHENCE)
@@ -1541,16 +1524,24 @@ typedef long long off_t_redefinition_typedef;
 # define __WIN64__
 #endif
 
-/* _FORTIFY_SOURCE is only supported by GCC >= 4.1 and glibc >= 2.3.4, but it
- * shouldn't cause a problem to define it where it's not supported and some
- * distros may have backported support, so hardcoding version checks is
- * counter-productive.
+/* Default to enabling _FORTIFY_SOURCE at level 2.  It shouldn't cause a
+ * problem to define it where it's not supported.
  *
  * Check if _FORTIFY_SOURCE is already defined to allow the user to override
  * our choice with "./configure CPPFLAGS=-D_FORTIFY_SOURCE=0" or "...=1".
  */
 #if defined __GNUC__ && !defined _FORTIFY_SOURCE
 # define _FORTIFY_SOURCE 2
+# ifdef __MINGW32__
+/* Both mingw32 and mingw-w64 define __MINGW32__. */
+#  include <stddef.h>
+#  ifdef __MINGW64_VERSION_MAJOR
+/* Enabling _FORTIFY_SOURCE on newer mingw-w64 requires linking with -lssp so
+ * we simply don't automatically enable it there.
+ */
+#   undef _FORTIFY_SOURCE
+#  endif
+# endif
 #endif
 
 /* For compilers which support it (such as GCC, clang, Intel's C++ compiler)
@@ -1580,7 +1571,7 @@ typedef long long off_t_redefinition_typedef;
  * how to avoid this, so just define the same magic macro which <cmath> does
  * before it includes <math.h>.
  */
-#ifdef __SUNPRO_CC
+#if defined __SUNPRO_CC && !defined __MATHERR_RENAME_EXCEPTION
 # define __MATHERR_RENAME_EXCEPTION
 #endif
 ])
@@ -1628,12 +1619,12 @@ AC_CONFIG_FILES([
  cmake/xapian-config-version.cmake
  pkgconfig/xapian-core"$LIBRARY_VERSION_SUFFIX".pc:pkgconfig/xapian-core.pc.in
  ])
+AC_CONFIG_FILES([makemanpage], [chmod +x makemanpage])
 AC_CONFIG_FILES([tests/runtest], [chmod +x tests/runtest])
 AC_CONFIG_FILES([tests/runsrv], [chmod +x tests/runsrv])
 AC_CONFIG_FILES([tests/submitperftest], [chmod +x tests/submitperftest])
 AC_CONFIG_FILES([tests/perftest/get_machine_info], [chmod +x tests/perftest/get_machine_info])
 AC_CONFIG_FILES([xapian-config], [chmod +x xapian-config])
-AC_CONFIG_FILES([makemanpage], [chmod +x makemanpage])
 AC_OUTPUT
 
 dnl There are no files generated by AC_OUTPUT in the following directories

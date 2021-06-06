@@ -1,4 +1,4 @@
-/** @file constants.h
+/** @file
  * @brief Constants in the Xapian namespace
  */
 /* Copyright (C) 2012,2013,2014,2015,2016,2017,2018 Olly Betts
@@ -23,7 +23,7 @@
 #define XAPIAN_INCLUDED_CONSTANTS_H
 
 #if !defined XAPIAN_IN_XAPIAN_H && !defined XAPIAN_LIB_BUILD
-# error "Never use <xapian/constants.h> directly; include <xapian.h> instead."
+# error Never use <xapian/constants.h> directly; include <xapian.h> instead.
 #endif
 
 namespace Xapian {

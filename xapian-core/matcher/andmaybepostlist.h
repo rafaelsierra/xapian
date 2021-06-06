@@ -1,4 +1,4 @@
-/** @file andmaybepostlist.h
+/** @file
  * @brief PostList class implementing Query::OP_AND_MAYBE
  */
 /* Copyright 2017 Olly Betts
@@ -83,7 +83,8 @@ class AndMaybePostList : public WrapperPostList {
     Xapian::docid get_docid() const;
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
 
     double recalc_maxweight();
 

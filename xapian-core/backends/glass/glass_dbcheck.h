@@ -1,4 +1,4 @@
-/** @file glass_dbcheck.h
+/** @file
  * @brief Check a glass table.
  */
 /* Copyright (C) 2008,2009,2012,2013,2014,2016 Olly Betts
@@ -24,7 +24,7 @@
 
 #include "xapian/types.h"
 
-#include <cstring> // For size_t.
+#include <sys/types.h> // For size_t and off_t.
 #include <iosfwd>
 #include <string>
 #include <vector>

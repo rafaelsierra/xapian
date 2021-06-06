@@ -1,4 +1,4 @@
-/** @file api_query.cc
+/** @file
  * @brief Query-related tests.
  */
 /* Copyright (C) 2008,2009,2012,2013,2015,2016,2017,2018,2019 Olly Betts
@@ -32,19 +32,42 @@
 
 using namespace std;
 
-/// Regression test - in 1.0.10 and earlier "" was included in the list.
 DEFINE_TESTCASE(queryterms1, !backend) {
     Xapian::Query query = Xapian::Query::MatchAll;
+    /// Regression test - in 1.0.10 and earlier "" was included in the list.
     TEST(query.get_terms_begin() == query.get_terms_end());
+    TEST(query.get_unique_terms_begin() == query.get_unique_terms_end());
     query = Xapian::Query(query.OP_AND_NOT, query, Xapian::Query("fair"));
     TEST_EQUAL(*query.get_terms_begin(), "fair");
-    return true;
+    TEST_EQUAL(*query.get_unique_terms_begin(), "fair");
+
+    Xapian::QueryParser qp;
+    Xapian::Query q = qp.parse_query("\"the the the\"");
+    {
+	auto t = q.get_terms_begin();
+	size_t count = 0;
+	while (t != q.get_terms_end()) {
+	    TEST_EQUAL(*t, "the");
+	    ++count;
+	    ++t;
+	}
+	TEST_EQUAL(count, 3);
+    }
+    {
+	auto t = q.get_unique_terms_begin();
+	size_t count = 0;
+	while (t != q.get_unique_terms_end()) {
+	    TEST_EQUAL(*t, "the");
+	    ++count;
+	    ++t;
+	}
+	TEST_EQUAL(count, 1);
+    }
 }
 
 DEFINE_TESTCASE(matchall2, !backend) {
     TEST_STRINGS_EQUAL(Xapian::Query::MatchAll.get_description(),
 		       "Query(<alldocuments>)");
-    return true;
 }
 
 DEFINE_TESTCASE(matchnothing1, !backend) {
@@ -59,7 +82,6 @@ DEFINE_TESTCASE(matchnothing1, !backend) {
     Xapian::Query q2(Xapian::Query::OP_AND,
 		     Xapian::Query("foo"), Xapian::Query::MatchNothing);
     TEST_STRINGS_EQUAL(q2.get_description(), "Query()");
-    return true;
 }
 
 DEFINE_TESTCASE(overload1, !backend) {
@@ -214,7 +236,6 @@ DEFINE_TESTCASE(overload1, !backend) {
     TEST_STRINGS_EQUAL(q.get_description(), "Query(42 * (one AND two))");
     q = Xapian::Query("one") / 2.0;
     TEST_STRINGS_EQUAL(q.get_description(), "Query(0.5 * one)");
-    return true;
 }
 
 /** Regression test and feature test.
@@ -288,8 +309,6 @@ DEFINE_TESTCASE(possubqueries1, writable) {
 	Xapian::Query q(Xapian::Query::OP_PHRASE, a_phrs_b, c);
 	enq.set_query(q);
 	(void)enq.get_mset(0, 10));
-
-    return true;
 }
 
 /// Test that XOR handles all remaining subqueries running out at the same
@@ -321,8 +340,6 @@ DEFINE_TESTCASE(xor3, backend) {
     TEST_EQUAL(*mset[1], 4);
     TEST_EQUAL(*mset[2], 2);
     TEST_EQUAL(*mset[3], 3);
-
-    return true;
 }
 
 /// Check encoding of non-UTF8 terms in query descriptions.
@@ -337,7 +354,6 @@ DEFINE_TESTCASE(nonutf8termdesc1, !backend) {
     // Check that \x7f is escaped.
     TEST_EQUAL(Xapian::Query("D\x7f_\x7f~").get_description(),
 	       "Query(D\\x7f_\\x7f~)");
-    return true;
 }
 
 /// Test introspection on Query objects.
@@ -398,8 +414,6 @@ DEFINE_TESTCASE(queryintro1, !backend) {
     TEST_EQUAL(q.get_num_subqueries(), 2);
     TEST_EQUAL(q.get_subquery(0).get_type(), q.LEAF_TERM);
     TEST_EQUAL(q.get_subquery(1).get_type(), q.LEAF_TERM);
-
-    return true;
 }
 
 /// Regression test for bug introduced in 1.3.1 and fixed in 1.3.3.
@@ -417,8 +431,6 @@ DEFINE_TESTCASE(phrasealldocs1, backend) {
     enq.set_query(q);
     Xapian::MSet mset = enq.get_mset(0, 10);
     TEST_EQUAL(mset.size(), 3);
-
-    return true;
 }
 
 struct wildcard_testcase {
@@ -468,7 +480,7 @@ DEFINE_TESTCASE(wildcard1, backend) {
 		    max_type = Xapian::Query::WILDCARD_LIMIT_MOST_FREQUENT;
 		    break;
 		default:
-		    return false;
+		    FAIL_TEST("Unexpected max_type value");
 	    }
 	    q = Xapian::Query(o, test.pattern, test.max_expansion, max_type);
 	} else {
@@ -487,8 +499,6 @@ DEFINE_TESTCASE(wildcard1, backend) {
 	    TEST(expect_exception);
 	}
     }
-
-    return true;
 }
 
 /// Regression test for #696, fixed in 1.3.4.
@@ -512,12 +522,13 @@ DEFINE_TESTCASE(wildcard2, backend) {
     enq.set_query(q);
     Xapian::MSet mset = enq.get_mset(0, 10);
     TEST_EQUAL(mset.size(), 6);
-
-    return true;
 }
 
-/// Regression test for bug fixed in 1.4.12 - if any terms start with A-Z then
-//  the next term that doesn't isn't considered.
+/** Regression test for bug in initial implementation.
+ *
+ *  If any terms started with A-Z then the next term that didn't wasn't
+ *  considered.
+ */
 DEFINE_TESTCASE(wildcard3, generated) {
     Xapian::Database db = get_database("wildcard3",
 				       [](Xapian::WritableDatabase& wdb,
@@ -537,8 +548,6 @@ DEFINE_TESTCASE(wildcard3, generated) {
     enq.set_query(q);
     Xapian::MSet mset = enq.get_mset(0, 10);
     TEST_EQUAL(mset.size(), 2);
-
-    return true;
 }
 
 DEFINE_TESTCASE(dualprefixwildcard1, backend) {
@@ -550,7 +559,6 @@ DEFINE_TESTCASE(dualprefixwildcard1, backend) {
     Xapian::Enquire enq(db);
     enq.set_query(q);
     TEST_EQUAL(enq.get_mset(0, 5).size(), 2);
-    return true;
 }
 
 /// Test special case wildcards.
@@ -568,8 +576,6 @@ DEFINE_TESTCASE(specialwildcard1, !backend) {
     TEST_EQUAL(Xapian::Query(o, "?*", 0, f).get_description(), QUERY_ALLDOCS);
     TEST_EQUAL(Xapian::Query(o, "*?", 0, f).get_description(), QUERY_ALLDOCS);
     TEST_EQUAL(Xapian::Query(o, "*?*", 0, f).get_description(), QUERY_ALLDOCS);
-
-    return true;
 }
 
 /// Test `?` extended wildcard.
@@ -633,8 +639,6 @@ DEFINE_TESTCASE(singlecharwildcard1, writable) {
 	Xapian::MSet mset = enq.get_mset(0, 100);
 	mset_expect_order(mset, 6);
     }
-
-    return true;
 }
 
 /// Test `*` extended wildcard.
@@ -700,8 +704,6 @@ DEFINE_TESTCASE(multicharwildcard1, writable) {
 	Xapian::MSet mset = enq.get_mset(0, 100);
 	mset_expect_order(mset, 5);
     }
-
-    return true;
 }
 
 struct editdist_testcase {
@@ -752,7 +754,7 @@ DEFINE_TESTCASE(editdist1, backend) {
 		max_type = Xapian::Query::WILDCARD_LIMIT_MOST_FREQUENT;
 		break;
 	    default:
-		return false;
+		FAIL_TEST("Unexpected max_type value");
 	}
 	q = Xapian::Query(o, test.target, test.max_expansion, max_type,
 			  q.OP_SYNONYM, test.edit_distance);
@@ -770,8 +772,62 @@ DEFINE_TESTCASE(editdist1, backend) {
 	    TEST(expect_exception);
 	}
     }
+}
 
-    return true;
+static const
+editdist_testcase editdist2_testcases[] = {
+    { u8"\U00010000",	1, 8, 'E', { u8"a\U00010000", 0, 0, 0 } },
+};
+
+/// Test Unicode edit distance calculations.
+DEFINE_TESTCASE(editdist2, generated) {
+    Xapian::Database db = get_database("editdist2",
+				       [](Xapian::WritableDatabase& wdb,
+					  const string&)
+				       {
+					   Xapian::Document doc;
+					   doc.add_term(u8"a\U00010000");
+					   wdb.add_document(doc);
+				       });
+    Xapian::Enquire enq(db);
+    const Xapian::Query::op o = Xapian::Query::OP_EDIT_DISTANCE;
+
+    for (auto&& test : editdist2_testcases) {
+	tout << test.target << endl;
+	auto tend = test.terms + 4;
+	while (tend > test.terms && tend[-1] == NULL) --tend;
+	bool expect_exception = (tend - test.terms == 4 && tend[-1][0] == '\0');
+	Xapian::Query q;
+	int max_type;
+	switch (test.max_type) {
+	    case 'E':
+		max_type = Xapian::Query::WILDCARD_LIMIT_ERROR;
+		break;
+	    case 'F':
+		max_type = Xapian::Query::WILDCARD_LIMIT_FIRST;
+		break;
+	    case 'M':
+		max_type = Xapian::Query::WILDCARD_LIMIT_MOST_FREQUENT;
+		break;
+	    default:
+		FAIL_TEST("Unexpected max_type value");
+	}
+	q = Xapian::Query(o, test.target, test.max_expansion, max_type,
+			  q.OP_SYNONYM, test.edit_distance);
+	enq.set_query(q);
+	tout << q.get_description() << endl;
+	try {
+	    Xapian::MSet mset = enq.get_mset(0, 10);
+	    TEST(!expect_exception);
+	    q = Xapian::Query(q.OP_SYNONYM, test.terms, tend);
+	    enq.set_query(q);
+	    Xapian::MSet mset2 = enq.get_mset(0, 10);
+	    TEST_EQUAL(mset.size(), mset2.size());
+	    TEST(mset_range_is_same(mset, 0, mset2, 0, mset.size()));
+	} catch (const Xapian::WildcardError&) {
+	    TEST(expect_exception);
+	}
+    }
 }
 
 DEFINE_TESTCASE(dualprefixeditdist1, generated) {
@@ -806,8 +862,6 @@ DEFINE_TESTCASE(dualprefixeditdist1, generated) {
     enq.set_query(q);
     mset = enq.get_mset(0, 5);
     TEST_EQUAL(mset.size(), 2);
-
-    return true;
 }
 
 struct positional_testcase {
@@ -845,8 +899,6 @@ DEFINE_TESTCASE(loosephrase1, backend) {
 	    TEST_EQUAL(*mset[0], test.result);
 	}
     }
-
-    return true;
 }
 
 static const
@@ -879,8 +931,6 @@ DEFINE_TESTCASE(loosenear1, backend) {
 	    TEST_EQUAL(*mset[0], test.result);
 	}
     }
-
-    return true;
 }
 
 /// Regression test for bug fixed in 1.3.6 - the first case segfaulted in 1.3.x.
@@ -897,7 +947,6 @@ DEFINE_TESTCASE(complexphrase1, backend) {
 	    Xapian::Query("c"));
     enq.set_query(query2);
     TEST(enq.get_mset(0, 10).empty());
-    return true;
 }
 
 /// Regression test for bug fixed in 1.3.6 - the first case segfaulted in 1.3.x.
@@ -914,7 +963,6 @@ DEFINE_TESTCASE(complexnear1, backend) {
 	    Xapian::Query("c"));
     enq.set_query(query2);
     TEST(enq.get_mset(0, 10).empty());
-    return true;
 }
 
 /// Check subqueries of MatchAll, MatchNothing and PostingSource are supported.
@@ -936,7 +984,6 @@ DEFINE_TESTCASE(complexphrase2, backend) {
     Xapian::Query query(Xapian::Query::OP_OR, subqs, subqs + 3);
     enq.set_query(query);
     (void)enq.get_mset(0, 10);
-    return true;
 }
 
 /// Check subqueries of MatchAll, MatchNothing and PostingSource are supported.
@@ -958,7 +1005,6 @@ DEFINE_TESTCASE(complexnear2, backend) {
     Xapian::Query query(Xapian::Query::OP_OR, subqs, subqs + 3);
     enq.set_query(query);
     (void)enq.get_mset(0, 10);
-    return true;
 }
 
 /// A zero estimated number of matches broke the code to round the estimate.
@@ -970,7 +1016,6 @@ DEFINE_TESTCASE(zeroestimate1, backend) {
     enquire.set_query(phrase &~ Xapian::Query("queri"));
     Xapian::MSet mset = enquire.get_mset(0, 0);
     TEST_EQUAL(mset.get_matches_estimated(), 0);
-    return true;
 }
 
 /// Feature test for OR under OP_PHRASE support added in 1.4.3.
@@ -997,7 +1042,6 @@ DEFINE_TESTCASE(complexphrase3, backend) {
 	    Xapian::Query("one") | Xapian::Query("with"));
     enq.set_query(query4);
     mset_expect_order(enq.get_mset(0, 10));
-    return true;
 }
 
 /// Feature test for OR under OP_NEAR support added in 1.4.3.
@@ -1024,7 +1068,6 @@ DEFINE_TESTCASE(complexnear3, backend) {
 	    Xapian::Query("one") | Xapian::Query("with"));
     enq.set_query(query4);
     mset_expect_order(enq.get_mset(0, 10), 1, 4, 5);
-    return true;
 }
 
 static void
@@ -1039,43 +1082,66 @@ gen_subdbwithoutpos1_db(Xapian::WritableDatabase& db, const string&)
 
 DEFINE_TESTCASE(subdbwithoutpos1, generated) {
     Xapian::Database db(get_database("apitest_simpledata"));
+    TEST(db.has_positions());
 
-    Xapian::Query q(Xapian::Query::OP_PHRASE,
-		    Xapian::Query("this"),
-		    Xapian::Query("paragraph"));
+    Xapian::Query q_near(Xapian::Query::OP_NEAR,
+			 Xapian::Query("this"),
+			 Xapian::Query("paragraph"));
+
+    Xapian::Query q_phrase(Xapian::Query::OP_PHRASE,
+			   Xapian::Query("this"),
+			   Xapian::Query("paragraph"));
 
     Xapian::Enquire enq1(db);
-    enq1.set_query(q);
+    enq1.set_query(q_near);
     Xapian::MSet mset1 = enq1.get_mset(0, 10);
+    TEST_EQUAL(mset1.size(), 3);
+
+    enq1.set_query(q_phrase);
+    mset1 = enq1.get_mset(0, 10);
     TEST_EQUAL(mset1.size(), 3);
 
     Xapian::Database db2 =
 	get_database("subdbwithoutpos1", gen_subdbwithoutpos1_db);
+    TEST(!db2.has_positions());
 
-    // If a database has no positional info, OP_PHRASE -> OP_AND.
+    // If a database has no positional info, we used to map OP_PHRASE and
+    // OP_NEAR to OP_AND, but since 1.5.0 we no longer do.
     Xapian::Enquire enq2(db2);
-    enq2.set_query(q);
+    enq2.set_query(q_near);
     Xapian::MSet mset2 = enq2.get_mset(0, 10);
-    TEST_EQUAL(mset2.size(), 1);
+    TEST_EQUAL(mset2.size(), 0);
+
+    enq2.set_query(q_phrase);
+    mset2 = enq2.get_mset(0, 10);
+    TEST_EQUAL(mset2.size(), 0);
 
     // If one sub-database in a combined database has no positional info but
     // other sub-databases do, then we shouldn't convert OP_PHRASE to OP_AND
     // (but prior to 1.4.3 we did).
     db.add_database(db2);
+    TEST(db.has_positions());
+
     Xapian::Enquire enq3(db);
-    enq3.set_query(q);
+    enq3.set_query(q_near);
     Xapian::MSet mset3 = enq3.get_mset(0, 10);
     TEST_EQUAL(mset3.size(), 3);
     // Regression test for bug introduced in 1.4.3 which led to a division by
     // zero and then (at least on Linux) we got 1% here.
     TEST_EQUAL(mset3[0].get_percent(), 100);
 
+    enq3.set_query(q_phrase);
+    mset3 = enq3.get_mset(0, 10);
+    TEST_EQUAL(mset3.size(), 3);
+    // Regression test for bug introduced in 1.4.3 which led to a division by
+    // zero and then (at least on Linux) we got 1% here.
+    TEST_EQUAL(mset3[0].get_percent(), 100);
+
     // Regression test for https://trac.xapian.org/ticket/752
-    enq3.set_query((Xapian::Query("this") & q) | Xapian::Query("wibble"));
+    auto q = (Xapian::Query("this") & q_phrase) | Xapian::Query("wibble");
+    enq3.set_query(q);
     mset3 = enq3.get_mset(0, 10);
     TEST_EQUAL(mset3.size(), 4);
-
-    return true;
 }
 
 // Regression test for bug fixed in 1.4.4 and 1.2.25.
@@ -1089,8 +1155,6 @@ DEFINE_TESTCASE(notandor1, backend) {
 
     Xapian::MSet mset = enq.get_mset(0, 10, db.get_doccount());
     TEST_EQUAL(mset.get_matches_estimated(), 344);
-
-    return true;
 }
 
 // Regression test for bug fixed in git master before 1.5.0.
@@ -1104,6 +1168,78 @@ DEFINE_TESTCASE(boolorbug1, backend) {
     Xapian::MSet mset = enq.get_mset(0, 10, db.get_doccount());
     // Due to a bug in BoolOrPostList this returned 330 results.
     TEST_EQUAL(mset.get_matches_estimated(), 331);
+}
 
-    return true;
+// Regression test for bug introduced in 1.4.13 and fixed in 1.4.14.
+DEFINE_TESTCASE(hoistnotbug1, backend) {
+    Xapian::Database db(get_database("etext"));
+    using Xapian::Query;
+    Query q(Query::OP_PHRASE, Query("the"), Query("king"));
+    q &= ~Query("worldtornado");
+    q &= Query("a");
+    Xapian::Enquire enq(db);
+    enq.set_query(q);
+
+    // This reliably fails before the fix in an assertion build, and may crash
+    // in other builds.
+    Xapian::MSet mset = enq.get_mset(0, 10, db.get_doccount());
+    TEST_EQUAL(mset.get_matches_estimated(), 42);
+}
+
+// Regression test for segfault optimising query on git master before 1.5.0.
+DEFINE_TESTCASE(emptynot1, backend) {
+    Xapian::Database db(get_database("apitest_simpledata"));
+    Xapian::Enquire enq(db);
+    enq.set_weighting_scheme(Xapian::BoolWeight());
+    Xapian::Query query = Xapian::Query("document") & Xapian::Query("api");
+    // This range won't match anything, so collapses to MatchNothing as we
+    // optimise the query.
+    query = Xapian::Query(query.OP_AND_NOT,
+			  query,
+			  Xapian::Query(Xapian::Query::OP_VALUE_GE, 1234, "x"));
+    enq.set_query(query);
+    Xapian::MSet mset = enq.get_mset(0, 10);
+    TEST_EQUAL(mset.size(), 1);
+}
+
+// Similar case to emptynot1 but for OP_AND_MAYBE.  This case wasn't failing,
+// so this isn't a regression test, but we do want to ensure it works.
+DEFINE_TESTCASE(emptymaybe1, backend) {
+    Xapian::Database db(get_database("apitest_simpledata"));
+    Xapian::Enquire enq(db);
+    enq.set_weighting_scheme(Xapian::BoolWeight());
+    Xapian::Query query = Xapian::Query("document") & Xapian::Query("api");
+    // This range won't match anything, so collapses to MatchNothing as we
+    // optimise the query.
+    query = Xapian::Query(query.OP_AND_MAYBE,
+			  query,
+			  Xapian::Query(Xapian::Query::OP_VALUE_GE, 1234, "x"));
+    enq.set_query(query);
+    Xapian::MSet mset = enq.get_mset(0, 10);
+    TEST_EQUAL(mset.size(), 1);
+}
+
+DEFINE_TESTCASE(phraseweightcheckbug1, backend) {
+    Xapian::Database db(get_database("phraseweightcheckbug1"));
+    Xapian::Enquire enq(db);
+    static const char* const words[] = {"hello", "world"};
+    Xapian::Query query{Xapian::Query::OP_PHRASE, begin(words), end(words), 2};
+    query = Xapian::Query(query.OP_OR, query, Xapian::Query("most"));
+    tout << query.get_description() << '\n';
+    enq.set_query(query);
+    Xapian::MSet mset = enq.get_mset(0, 3);
+    TEST_EQUAL(mset.size(), 3);
+}
+
+DEFINE_TESTCASE(orphanedhint1, backend) {
+    Xapian::Database db(get_database("apitest_simpledata"));
+    Xapian::Enquire enq(db);
+    auto OP_WILDCARD = Xapian::Query::OP_WILDCARD;
+    Xapian::Query query = Xapian::Query(OP_WILDCARD, "doc") &
+			  Xapian::Query(OP_WILDCARD, "xyzzy");
+    query |= Xapian::Query("test");
+    tout << query.get_description() << '\n';
+    enq.set_query(query);
+    Xapian::MSet mset = enq.get_mset(0, 3);
+    TEST_EQUAL(mset.size(), 1);
 }

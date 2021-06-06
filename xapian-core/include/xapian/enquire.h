@@ -1,4 +1,4 @@
-/** @file enquire.h
+/** @file
  * @brief Querying session
  */
 /* Copyright (C) 2005,2013,2016,2017 Olly Betts
@@ -24,7 +24,7 @@
 #define XAPIAN_INCLUDED_ENQUIRE_H
 
 #if !defined XAPIAN_IN_XAPIAN_H && !defined XAPIAN_LIB_BUILD
-# error "Never use <xapian/enquire.h> directly; include <xapian.h> instead."
+# error Never use <xapian/enquire.h> directly; include <xapian.h> instead.
 #endif
 
 #include <string>
@@ -433,12 +433,12 @@ class XAPIAN_VISIBILITY_DEFAULT Enquire {
     }
 
     /// End iterator corresponding to @a get_matching_terms_begin().
-    TermIterator XAPIAN_NOTHROW(get_matching_terms_end(docid) const) {
+    TermIterator get_matching_terms_end(docid) const noexcept {
 	return TermIterator();
     }
 
     /// End iterator corresponding to @a get_matching_terms_begin().
-    TermIterator XAPIAN_NOTHROW(get_matching_terms_end(const MSetIterator&) const) {
+    TermIterator get_matching_terms_end(const MSetIterator&) const noexcept {
 	return TermIterator();
     }
 
@@ -517,9 +517,9 @@ class XAPIAN_VISIBILITY_DEFAULT Enquire {
      *
      *	@return	Xapian::ESet object containing a list of terms with weights.
      */
-    inline ESet get_eset(termcount maxitems,
-			 const RSet& rset,
-			 const ExpandDecider* edecider) const {
+    ESet get_eset(termcount maxitems,
+		  const RSet& rset,
+		  const ExpandDecider* edecider) const {
 	return get_eset(maxitems, rset, 0, edecider);
     }
 

@@ -1,4 +1,4 @@
-/** @file coordweight.cc
+/** @file
  * @brief Xapian::CoordWeight class - coordinate matching
  */
 /* Copyright (C) 2004,2009,2011,2016 Olly Betts
@@ -69,7 +69,7 @@ CoordWeight::unserialise(const string& s) const
 
 double
 CoordWeight::get_sumpart(Xapian::termcount, Xapian::termcount,
-			 Xapian::termcount) const
+			 Xapian::termcount, Xapian::termcount) const
 {
     return factor;
 }
@@ -81,7 +81,9 @@ CoordWeight::get_maxpart() const
 }
 
 double
-CoordWeight::get_sumextra(Xapian::termcount, Xapian::termcount) const
+CoordWeight::get_sumextra(Xapian::termcount,
+			  Xapian::termcount,
+			  Xapian::termcount) const
 {
     return 0;
 }

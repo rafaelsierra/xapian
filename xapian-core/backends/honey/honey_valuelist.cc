@@ -1,4 +1,4 @@
-/** @file honey_valuelist.cc
+/** @file
  * @brief Honey class for value streams.
  */
 /* Copyright (C) 2007,2008,2009 Olly Betts
@@ -37,7 +37,7 @@ HoneyValueList::update_reader()
     if (!last_did) return false;
 
     cursor->read_tag();
-    const string & tag = cursor->current_tag;
+    const string& tag = cursor->current_tag;
     reader.assign(tag.data(), tag.size(), last_did);
     return true;
 }

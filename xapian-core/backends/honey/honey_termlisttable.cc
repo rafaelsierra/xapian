@@ -1,4 +1,4 @@
-/** @file honey_termlisttable.cc
+/** @file
  * @brief Subclass of HoneyTable which holds termlists.
  */
 /* Copyright (C) 2007,2008,2009,2010,2018 Olly Betts
@@ -37,7 +37,7 @@ using namespace std;
 
 void
 HoneyTermListTable::set_termlist(Xapian::docid did,
-				 const Xapian::Document & doc,
+				 const Xapian::Document& doc,
 				 Xapian::termcount doclen)
 {
     LOGCALL_VOID(DB, "HoneyTermListTable::set_termlist", did | doc | doclen);
@@ -60,7 +60,7 @@ HoneyTermListTable::set_termlist(Xapian::docid did,
 	tag += prev_term;
 
 	while (++t != doc.termlist_end()) {
-	    const string & term = *t;
+	    const string& term = *t;
 	    // If there's a shared prefix with the previous term, we don't
 	    // store it explicitly, but just store the length of the shared
 	    // prefix.  In general, this is a big win.

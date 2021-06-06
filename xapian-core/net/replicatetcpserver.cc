@@ -1,4 +1,4 @@
-/** @file replicatetcpserver.cc
+/** @file
  * @brief TCP/IP replication server class.
  */
 /* Copyright (C) 2008,2010,2011 Olly Betts
@@ -24,6 +24,7 @@
 
 #include <xapian/error.h>
 #include "api/replication.h"
+#include "remoteconnection.h"
 
 using namespace std;
 

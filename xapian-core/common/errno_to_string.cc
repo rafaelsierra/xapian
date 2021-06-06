@@ -1,4 +1,4 @@
-/** @file errno_to_string.cc
+/** @file
  * @brief Convert errno value to std::string, thread-safely if possible
  */
 /* Copyright (C) 2014,2015,2016 Olly Betts
@@ -40,7 +40,8 @@
 using namespace std;
 
 void
-errno_to_string(int e, string & s) {
+errno_to_string(int e, string& s)
+{
 #if defined HAVE__SYS_ERRLIST_AND__SYS_NERR
     if (e >= 0 && e < _sys_nerr && _sys_errlist[e]) {
 	s += _sys_errlist[e];

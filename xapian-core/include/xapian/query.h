@@ -1,4 +1,4 @@
-/** @file query.h
+/** @file
  * @brief Xapian::Query API class
  */
 /* Copyright (C) 2011,2012,2013,2014,2015,2016,2017,2018,2019 Olly Betts
@@ -23,7 +23,7 @@
 #define XAPIAN_INCLUDED_QUERY_H
 
 #if !defined XAPIAN_IN_XAPIAN_H && !defined XAPIAN_LIB_BUILD
-# error "Never use <xapian/query.h> directly; include <xapian.h> instead."
+# error Never use <xapian/query.h> directly; include <xapian.h> instead.
 #endif
 
 #include <string>
@@ -54,29 +54,113 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
      *  object.  It is safe to use concurrently from different threads,
      *  unlike @a MatchAll (this is because MatchNothing has a NULL
      *  internal object so there's no reference counting happening).
+     *
+     *  When combined with other Query objects using the various supported
+     *  operators, MatchNothing works like @c false in boolean logic, so
+     *  <code>MatchNothing & q</code> is @c MatchNothing, while
+     *  <code>MatchNothing | q</code> is @c q.
      */
     static const Xapian::Query MatchNothing;
 
     /** A query matching all documents.
      *
-     *  This is a static instance of Xapian::Query(std::string()).  If
-     *  you are constructing Query objects in different threads, avoid
-     *  using @a MatchAll as the reference counting of the static object
-     *  can get messed up by concurrent access).
+     *  This is a static instance of <code>Xapian::Query(std::string())</code>.
+     *  If you are constructing Query objects which use @a MatchAll in
+     *  different threads then the reference counting of the static object can
+     *  get messed up by concurrent access so you should instead use
+     *  <code>Xapian::Query(std::string())</code> directly.
      */
     static const Xapian::Query MatchAll;
 
     /** Query operators. */
     enum op {
+	/** Match only documents which all subqueries match.
+	 *
+	 *  When used in a weighted context, the weight is the sum of the
+	 *  weights for all the subqueries.
+	 */
 	OP_AND = 0,
+
+	/** Match documents which at least one subquery matches.
+	 *
+	 *  When used in a weighted context, the weight is the sum of the
+	 *  weights for matching subqueries (so additional matching subqueries
+	 *  will mean a higher weight).
+	 */
 	OP_OR = 1,
+
+	/** Match documents which the first subquery matches but no others do.
+	 *
+	 *  When used in a weighted context, the weight is just the weight of
+	 *  the first subquery.
+	 */
 	OP_AND_NOT = 2,
+
+	/** Match documents which an odd number of subqueries match.
+	 *
+	 *  When used in a weighted context, the weight is the sum of the
+	 *  weights for matching subqueries (so additional matching subqueries
+	 *  will mean a higher weight).
+	 */
 	OP_XOR = 3,
+
+	/** Match the first subquery taking extra weight from other subqueries.
+	 *
+	 *  When used in a weighted context, the weight is the sum of the
+	 *  weights for matching subqueries (so additional matching subqueries
+	 *  will mean a higher weight).
+	 *
+	 *  Because only the first subquery determines which documents are
+	 *  matched, in a non-weighted context only the first subquery matters.
+	 */
 	OP_AND_MAYBE = 4,
+
+	/** Match like OP_AND but only taking weight from the first subquery.
+	 *
+	 *  When used in a non-weighted context, OP_FILTER and OP_AND are
+	 *  equivalent.
+	 *
+	 *  In older 1.4.x, the third and subsequent subqueries were ignored
+	 *  in some situations.  This was fixed in 1.4.15.
+	 */
 	OP_FILTER = 5,
+
+	/** Match only documents where all subqueries match near each other.
+	 *
+	 *  The subqueries must match at term positions within the specified
+	 *  window size, in any order.
+	 *
+	 *  Currently subqueries must be terms or terms composed with OP_OR.
+	 *
+	 *  When used in a weighted context, the weight is the sum of the
+	 *  weights for all the subqueries.
+	 */
 	OP_NEAR = 6,
+
+	/** Match only documents where all subqueries match near and in order.
+	 *
+	 *  The subqueries must match at term positions within the specified
+	 *  window size, in the same term position order as subquery order.
+	 *
+	 *  Currently subqueries must be terms or terms composed with OP_OR.
+	 *
+	 *  When used in a weighted context, the weight is the sum of the
+	 *  weights for all the subqueries.
+	 */
 	OP_PHRASE = 7,
+
+	/** Match only documents where a value slot is within a given range.
+	 *
+	 *  This operator never contributes weight.
+	 */
 	OP_VALUE_RANGE = 8,
+
+	/** Scale the weight contributed by a subquery.
+	 *
+	 *  The weight is the weight of the subquery multiplied by the
+	 *  specified non-negative scale factor (so if the scale factor is
+	 *  zero then the subquery contributes no weight).
+	 */
 	OP_SCALE_WEIGHT = 9,
 
 	/** Pick the best N subqueries and combine with OP_OR.
@@ -118,21 +202,44 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
 	 * OP_ELITE_SET behaves identically to OP_OR.
 	 */
 	OP_ELITE_SET = 10,
+
+	/** Match only documents where a value slot is >= a given value.
+	 *
+	 *  Similar to @a OP_VALUE_RANGE, but open-ended.
+	 *
+	 *  This operator never contributes weight.
+	 */
 	OP_VALUE_GE = 11,
+
+	/** Match only documents where a value slot is <= a given value.
+	 *
+	 *  Similar to @a OP_VALUE_RANGE, but open-ended.
+	 *
+	 *  This operator never contributes weight.
+	 */
 	OP_VALUE_LE = 12,
+
+	/** Match like OP_OR but weighting as if a single term.
+	 *
+	 *  The weight is calculated combining the statistics for the
+	 *  subqueries to approximate the weight of a single term occurring
+	 *  with those statistics.
+	 */
 	OP_SYNONYM = 13,
+
 	/** Pick the maximum weight of any subquery.
 	 *
 	 *  Matches the same documents as @a OP_OR, but the weight contributed
 	 *  is the maximum weight from any matching subquery (for OP_OR, it's
 	 *  the sum of the weights from the matching subqueries).
 	 *
-	 *  Added in Xapian 1.3.2.
+	 *  @since Added in Xapian 1.3.2.
 	 */
 	OP_MAX = 14,
+
 	/** Wildcard expansion.
 	 *
-	 *  Added in Xapian 1.3.3.
+	 *  @since Added in Xapian 1.3.3.
 	 */
 	OP_WILDCARD = 15,
 
@@ -150,11 +257,31 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
 	 */
 	OP_EDIT_DISTANCE = 16,
 
+	/** Construct an invalid query.
+	 *
+	 *  This can be useful as a placeholder - for example @a RangeProcessor
+	 *  uses it as a return value to indicate that a range hasn't been
+	 *  recognised.
+	 */
 	OP_INVALID = 99,
 
+	/** Value returned by get_type() for a term. */
 	LEAF_TERM = 100,
+
+	/** Value returned by get_type() for a PostingSource. */
 	LEAF_POSTING_SOURCE,
+
+	/** Value returned by get_type() for MatchAll or equivalent.
+	 *
+	 *  This is returned for any <code>Xapian::Query(std::string())</code>
+	 *  object.
+	 */
 	LEAF_MATCH_ALL,
+
+	/** Value returned by get_type() for MatchNothing or equivalent.
+	 *
+	 *  This is returned for any <code>Xapian::Query()</code> object.
+	 */
 	LEAF_MATCH_NOTHING
     };
 
@@ -186,7 +313,7 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
 
 	/** Support * which matches 0 or more characters.
 	 *
-	 *  @since Added in Xapian 1.5.0.
+	 *  @since Added in Xapian 1.5.0
 	 */
 	WILDCARD_PATTERN_MULTI = 0x10,
 
@@ -203,8 +330,16 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
 	WILDCARD_PATTERN_GLOB = WILDCARD_PATTERN_MULTI|WILDCARD_PATTERN_SINGLE
     };
 
-    /// Default constructor.
-    XAPIAN_NOTHROW(Query()) { }
+    /** Construct a query matching no documents.
+     *
+     *  @a MatchNothing is a static instance of this.
+     *
+     *  When combined with other Query objects using the various supported
+     *  operators, <code>Query()</code> works like @c false in boolean logic,
+     *  so <code>Query() & q</code> is @c Query(), while
+     *  <code>Query() | q</code> is @c q.
+     */
+    Query() noexcept { }
 
     /// Destructor.
     ~Query() { }
@@ -227,7 +362,15 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
     /// Move assignment operator.
     Query & operator=(Query &&) = default;
 
-    /** Construct a Query object for a term. */
+    /** Construct a Query object for a term.
+     *
+     *  @param term The term.  An empty string constructs a query matching
+     *		    all documents (@a MatchAll is a static instance of this).
+     *  @param wqf  The within-query frequency. (default: 1)
+     *  @param pos  The query position.  Currently this is mainly used to
+     *		    determine the order of terms obtained via
+     *		    get_terms_begin(). (default: 0)
+     */
     Query(const std::string & term,
 	  Xapian::termcount wqf = 1,
 	  Xapian::termpos pos = 0);
@@ -390,6 +533,9 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
      *  Xapian::Query*, a std::string or a type which converts to one of
      *  these (e.g. const char*).
      *
+     *  If begin == end then there are no subqueries and the resulting Query
+     *  won't match anything.
+     *
      *  @param op_	The operator to combine the queries with.
      *  @param begin	Begin iterator.
      *  @param end	End iterator.
@@ -432,7 +578,7 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
     const TermIterator get_terms_begin() const;
 
     /// End iterator for terms in the query object.
-    const TermIterator XAPIAN_NOTHROW(get_terms_end() const) {
+    const TermIterator get_terms_end() const noexcept {
 	return TermIterator();
     }
 
@@ -445,11 +591,16 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
      */
     const TermIterator get_unique_terms_begin() const;
 
+    /// End iterator for unique terms in the query object.
+    const TermIterator get_unique_terms_end() const noexcept {
+	return TermIterator();
+    }
+
     /** Return the length of this query object. */
-    Xapian::termcount XAPIAN_NOTHROW(get_length() const) XAPIAN_PURE_FUNCTION;
+    Xapian::termcount get_length() const noexcept XAPIAN_PURE_FUNCTION;
 
     /** Check if this query is Xapian::Query::MatchNothing. */
-    bool XAPIAN_NOTHROW(empty() const) {
+    bool empty() const noexcept {
 	return internal.get() == 0;
     }
 
@@ -467,10 +618,10 @@ class XAPIAN_VISIBILITY_DEFAULT Query {
 				   const Registry & reg = Registry());
 
     /** Get the type of the top level of the query. */
-    op XAPIAN_NOTHROW(get_type() const) XAPIAN_PURE_FUNCTION;
+    op get_type() const noexcept XAPIAN_PURE_FUNCTION;
 
     /** Get the number of subqueries of the top level query. */
-    size_t XAPIAN_NOTHROW(get_num_subqueries() const) XAPIAN_PURE_FUNCTION;
+    size_t get_num_subqueries() const noexcept XAPIAN_PURE_FUNCTION;
 
     /** Get the wqf parameter of a leaf node. */
     Xapian::termcount get_leaf_wqf() const;
@@ -693,7 +844,7 @@ class QueryOptimiser;
 /** @private @internal */
 class Query::Internal : public Xapian::Internal::intrusive_base {
   public:
-    XAPIAN_NOTHROW(Internal()) { }
+    Internal() noexcept { }
 
     virtual ~Internal();
 
@@ -710,20 +861,21 @@ class Query::Internal : public Xapian::Internal::intrusive_base {
 
     virtual void postlist_sub_or_like(Xapian::Internal::OrContext& ctx,
 				      Xapian::Internal::QueryOptimiser* qopt,
-				      double factor) const;
+				      double factor,
+				      bool keep_zero_weight = true) const;
 
     virtual void postlist_sub_xor(Xapian::Internal::XorContext& ctx,
 				  Xapian::Internal::QueryOptimiser* qopt,
 				  double factor) const;
 
-    virtual termcount XAPIAN_NOTHROW(get_length() const) XAPIAN_PURE_FUNCTION;
+    virtual termcount get_length() const noexcept XAPIAN_PURE_FUNCTION;
 
     virtual void serialise(std::string & result) const = 0;
 
     static Query::Internal * unserialise(const char ** p, const char * end, const Registry & reg);
 
-    virtual Query::op XAPIAN_NOTHROW(get_type() const) XAPIAN_PURE_FUNCTION = 0;
-    virtual size_t XAPIAN_NOTHROW(get_num_subqueries() const) XAPIAN_PURE_FUNCTION;
+    virtual Query::op get_type() const noexcept XAPIAN_PURE_FUNCTION = 0;
+    virtual size_t get_num_subqueries() const noexcept XAPIAN_PURE_FUNCTION;
     virtual const Query get_subquery(size_t n) const;
     virtual termcount get_wqf() const;
     virtual termpos get_pos() const;

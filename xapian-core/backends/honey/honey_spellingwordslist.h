@@ -1,4 +1,4 @@
-/** @file honey_spellingwordslist.h
+/** @file
  * @brief A termlist containing all words which are spelling targets.
  */
 /* Copyright (C) 2005,2008,2009,2010,2011,2017 Olly Betts
@@ -30,10 +30,10 @@ class HoneyDatabase;
 
 class HoneySpellingWordsList : public AllTermsList {
     /// Copying is not allowed.
-    HoneySpellingWordsList(const HoneySpellingWordsList &);
+    HoneySpellingWordsList(const HoneySpellingWordsList&);
 
     /// Assignment is not allowed.
-    void operator=(const HoneySpellingWordsList &);
+    void operator=(const HoneySpellingWordsList&);
 
     /// Keep a reference to our database to stop it being deleted.
     Xapian::Internal::intrusive_ptr<const HoneyDatabase> database;
@@ -41,7 +41,7 @@ class HoneySpellingWordsList : public AllTermsList {
     /** A cursor which runs through the spelling table reading termnames from
      *  the keys.
      */
-    HoneyCursor * cursor;
+    HoneyCursor* cursor;
 
     /** The term frequency of the term at the current position.
      *
@@ -84,18 +84,11 @@ class HoneySpellingWordsList : public AllTermsList {
      */
     Xapian::doccount get_termfreq() const;
 
-    /** Returns the collection frequency of the current term.
-     *
-     *  Either next() or skip_to() must have been called before this
-     *  method can be called.
-     */
-    Xapian::termcount get_collection_freq() const;
-
     /// Advance to the next term in the list.
-    TermList * next();
+    TermList* next();
 
     /// Advance to the first term which is >= term.
-    TermList * skip_to(const std::string& term);
+    TermList* skip_to(const std::string& term);
 
     /// True if we're off the end of the list
     bool at_end() const;

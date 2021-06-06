@@ -1,4 +1,4 @@
-/** @file maxpostlist.cc
+/** @file
  * @brief N-way OR postlist with wt=max(wt_i)
  */
 /* Copyright (C) 2007,2009,2010,2011,2012,2013,2014,2017 Olly Betts
@@ -97,7 +97,11 @@ MaxPostList::get_termfreq_est_using_stats(
 	rtf_scale = 1.0 / stats.rset_size;
     }
     double Pr_est = freqs.reltermfreq * rtf_scale;
-    double cf_scale = 1.0 / stats.total_term_count;
+    // If total_length is 0, cf must always be 0 so cf_scale is irrelevant.
+    double cf_scale = 0.0;
+    if (usual(stats.total_length != 0)) {
+	cf_scale = 1.0 / stats.total_length;
+    }
     double Pc_est = freqs.collfreq * cf_scale;
 
     for (size_t i = 1; i < n_kids; ++i) {
@@ -115,7 +119,7 @@ MaxPostList::get_termfreq_est_using_stats(
     }
     return TermFreqs(Xapian::doccount(P_est * stats.collection_size + 0.5),
 		     Xapian::doccount(Pr_est * stats.rset_size + 0.5),
-		     Xapian::termcount(Pc_est * stats.total_term_count + 0.5));
+		     Xapian::termcount(Pc_est * stats.total_length + 0.5));
 }
 
 Xapian::docid
@@ -126,13 +130,16 @@ MaxPostList::get_docid() const
 
 double
 MaxPostList::get_weight(Xapian::termcount doclen,
-			Xapian::termcount unique_terms) const
+			Xapian::termcount unique_terms,
+			Xapian::termcount wdfdocmax) const
 {
     Assert(did);
     double res = 0.0;
     for (size_t i = 0; i < n_kids; ++i) {
 	if (plist[i]->get_docid() == did)
-	    res = max(res, plist[i]->get_weight(doclen, unique_terms));
+	    res = max(res, plist[i]->get_weight(doclen,
+						unique_terms,
+						wdfdocmax));
     }
     return res;
 }

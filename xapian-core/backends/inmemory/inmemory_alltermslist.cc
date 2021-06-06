@@ -1,4 +1,4 @@
-/** @file inmemory_alltermslist.cc
+/** @file
  * @brief Iterate all terms in an inmemory db
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -24,6 +24,8 @@
 #include "inmemory_alltermslist.h"
 
 #include "stringutils.h"
+
+using namespace std;
 
 Xapian::termcount
 InMemoryAllTermsList::get_approx_size() const
@@ -51,15 +53,6 @@ InMemoryAllTermsList::get_termfreq() const
     Assert(!it->first.empty());
     /* FIXME: this isn't quite right. */
     return it->second.docs.size();
-}
-
-Xapian::termcount
-InMemoryAllTermsList::get_collection_freq() const
-{
-    if (database->is_closed()) InMemoryDatabase::throw_database_closed();
-    Assert(!at_end());
-    Assert(!it->first.empty());
-    throw Xapian::UnimplementedError("Collection frequency not implemented in InMemory backend");
 }
 
 TermList *

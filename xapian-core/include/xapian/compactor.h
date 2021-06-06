@@ -1,4 +1,4 @@
-/** @file compactor.h
+/** @file
  * @brief Compact a database, or merge and compact several.
  */
 /* Copyright (C) 2003,2004,2005,2006,2007,2008,2009,2010,2011,2013,2014,2015,2018 Olly Betts
@@ -24,7 +24,7 @@
 #define XAPIAN_INCLUDED_COMPACTOR_H
 
 #if !defined XAPIAN_IN_XAPIAN_H && !defined XAPIAN_LIB_BUILD
-# error "Never use <xapian/compactor.h> directly; include <xapian.h> instead."
+# error Never use <xapian/compactor.h> directly; include <xapian.h> instead.
 #endif
 
 #include <xapian/constants.h>

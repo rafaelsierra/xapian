@@ -1,4 +1,4 @@
-/** @file xapian/constinfo.h
+/** @file
  *  @brief Mechanism for accessing a struct of constant information
  */
 // Copyright (C) 2003,2004,2005,2007,2008,2009,2010,2012,2013,2015 Olly Betts
@@ -46,7 +46,7 @@ struct constinfo {
  *  number of pieces of information), which reduces the library load time.
  */
 XAPIAN_VISIBILITY_DEFAULT
-const struct constinfo * XAPIAN_NOTHROW(get_constinfo_()) XAPIAN_CONST_FUNCTION;
+const struct constinfo* get_constinfo_() noexcept XAPIAN_CONST_FUNCTION;
 
 }
 }

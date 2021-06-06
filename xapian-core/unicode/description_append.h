@@ -1,4 +1,4 @@
-/** @file description_append.h
+/** @file
  *  @brief Append a string to an object description, escaping invalid UTF-8
  */
 /* Copyright (C) 2013 Olly Betts
@@ -23,6 +23,6 @@
 
 #include <string>
 
-void description_append(std::string & desc, const std::string &s);
+void description_append(std::string& desc, const std::string& s);
 
 #endif

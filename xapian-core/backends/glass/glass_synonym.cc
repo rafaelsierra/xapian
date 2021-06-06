@@ -1,4 +1,4 @@
-/** @file glass_synonym.cc
+/** @file
  * @brief Synonym data for a glass database.
  */
 /* Copyright (C) 2004,2005,2006,2007,2008,2009,2011,2017 Olly Betts
@@ -194,12 +194,6 @@ Xapian::doccount
 GlassSynonymTermList::get_termfreq() const
 {
     throw Xapian::InvalidOperationError("GlassSynonymTermList::get_termfreq() not meaningful");
-}
-
-Xapian::termcount
-GlassSynonymTermList::get_collection_freq() const
-{
-    throw Xapian::InvalidOperationError("GlassSynonymTermList::get_collection_freq() not meaningful");
 }
 
 TermList *

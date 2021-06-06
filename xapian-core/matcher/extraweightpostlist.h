@@ -1,4 +1,4 @@
-/** @file extraweightpostlist.h
+/** @file
  * @brief PostList which adds on a term-independent weight contribution
  */
 /* Copyright 2017 Olly Betts
@@ -57,7 +57,8 @@ class ExtraWeightPostList : public WrapperPostList {
     }
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
 
     double recalc_maxweight();
 

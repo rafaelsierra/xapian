@@ -1,4 +1,4 @@
-/** @file queryparser.cc
+/** @file
  * @brief The non-lemon-generated parts of the QueryParser class.
  */
 /* Copyright (C) 2005,2006,2007,2008,2010,2011,2012,2013,2015,2016 Olly Betts
@@ -171,15 +171,17 @@ Query
 QueryParser::parse_query(const string &query_string, unsigned flags,
 			 const string &default_prefix)
 {
-    internal->stoplist.clear();
-    internal->unstem.clear();
+    if (!(flags & FLAG_ACCUMULATE)) {
+	internal->stoplist.clear();
+	internal->unstem.clear();
+    }
     internal->errmsg = NULL;
 
     if (query_string.empty()) return Query();
 
     Query result = internal->parse_query(query_string, flags, default_prefix);
     if (internal->errmsg && strcmp(internal->errmsg, "parse error") == 0) {
-	flags &= FLAG_CJK_NGRAM;
+	flags &= FLAG_CJK_NGRAM | FLAG_NO_POSITIONS;
 	result = internal->parse_query(query_string, flags, default_prefix);
     }
 
@@ -228,16 +230,14 @@ QueryParser::stoplist_begin() const
 TermIterator
 QueryParser::unstem_begin(const string &term) const
 {
-    pair<multimap<string, string>::iterator,
-	 multimap<string, string>::iterator> range;
-    range = internal->unstem.equal_range(term);
-    list<string> l;
-    multimap<string, string>::iterator & i = range.first;
-    while (i != range.second) {
-	l.push_back(i->second);
-	++i;
-    }
-    return TermIterator(new VectorTermList(l.begin(), l.end()));
+    struct range_adaptor : public multimap<string, string>::iterator {
+	range_adaptor(multimap<string, string>::iterator i) :
+	    multimap<string, string>::iterator(i) {}
+	const string & operator*() const { return (*this)->second; }
+    };
+    auto range = internal->unstem.equal_range(term);
+    return TermIterator(new VectorTermList(range_adaptor(range.first),
+					   range_adaptor(range.second)));
 }
 
 void

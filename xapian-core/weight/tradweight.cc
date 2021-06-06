@@ -1,4 +1,4 @@
-/** @file tradweight.cc
+/** @file
  * @brief Xapian::TradWeight class - the "traditional" probabilistic formula
  */
 /* Copyright (C) 2009,2010,2011,2012,2014,2015,2017 Olly Betts
@@ -155,7 +155,7 @@ TradWeight::unserialise(const string & s) const
 
 double
 TradWeight::get_sumpart(Xapian::termcount wdf, Xapian::termcount len,
-			Xapian::termcount) const
+			Xapian::termcount, Xapian::termcount) const
 {
     double wdf_double = wdf;
     return termweight * (wdf_double / (len * len_factor + wdf_double));
@@ -171,7 +171,9 @@ TradWeight::get_maxpart() const
 }
 
 double
-TradWeight::get_sumextra(Xapian::termcount, Xapian::termcount) const
+TradWeight::get_sumextra(Xapian::termcount,
+			 Xapian::termcount,
+			 Xapian::termcount) const
 {
     return 0;
 }
@@ -182,6 +184,12 @@ TradWeight::get_maxextra() const
     return 0;
 }
 
+static inline void
+parameter_error(const char* message)
+{
+    Xapian::Weight::Internal::parameter_error(message, "trad");
+}
+
 TradWeight *
 TradWeight::create_from_parameters(const char * p) const
 {
@@ -189,9 +197,9 @@ TradWeight::create_from_parameters(const char * p) const
 	return new Xapian::TradWeight();
     double k = 1.0;
     if (!Xapian::Weight::Internal::double_param(&p, &k))
-	Xapian::Weight::Internal::parameter_error("Parameter is invalid", "trad");
+	parameter_error("Parameter is invalid");
     if (*p)
-	Xapian::Weight::Internal::parameter_error("Extra data after parameter", "trad");
+	parameter_error("Extra data after parameter");
     return new Xapian::TradWeight(k);
 }
 

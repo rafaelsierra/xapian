@@ -1,4 +1,4 @@
-/** @file glass_spellingwordslist.h
+/** @file
  * @brief A termlist containing all words which are spelling targets.
  */
 /* Copyright (C) 2005,2008,2009,2010,2011,2017 Olly Betts
@@ -81,13 +81,6 @@ class GlassSpellingWordsList : public AllTermsList {
      *  method can be called.
      */
     Xapian::doccount get_termfreq() const;
-
-    /** Returns the collection frequency of the current term.
-     *
-     *  Either next() or skip_to() must have been called before this
-     *  method can be called.
-     */
-    Xapian::termcount get_collection_freq() const;
 
     /// Advance to the next term in the list.
     TermList * next();

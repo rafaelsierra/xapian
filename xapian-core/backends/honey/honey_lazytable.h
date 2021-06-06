@@ -1,4 +1,4 @@
-/** @file honey_lazytable.h
+/** @file
  * @brief Subclass of HoneyTable for deriving lazy tables from.
  */
 /* Copyright (C) 2009,2013,2014,2015,2016 Olly Betts
@@ -31,10 +31,10 @@ class HoneyLazyTable : public HoneyTable {
      *  @param path_		The path for the table.
      *  @param readonly		true if the table is read-only, else false.
      */
-    HoneyLazyTable(const char * name_, const std::string & path_, bool readonly)
+    HoneyLazyTable(const char* name_, const std::string& path_, bool readonly)
 	: HoneyTable(name_, path_, readonly, true) { }
 
-    HoneyLazyTable(const char * name_, int fd, off_t offset_, bool readonly)
+    HoneyLazyTable(const char* name_, int fd, off_t offset_, bool readonly)
 	: HoneyTable(name_, fd, offset_, readonly, true) { }
 };
 

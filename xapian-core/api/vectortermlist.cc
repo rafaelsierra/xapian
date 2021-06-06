@@ -1,4 +1,4 @@
-/** @file vectortermlist.cc
+/** @file
  * @brief A vector-like container of terms which can be iterated.
  */
 /* Copyright (C) 2011,2015 Olly Betts
@@ -22,8 +22,8 @@
 
 #include "vectortermlist.h"
 
-#include "net/length.h"
 #include "omassert.h"
+#include "pack.h"
 #include "xapian/error.h"
 
 using namespace std;
@@ -69,10 +69,9 @@ VectorTermList::next()
 	current_term.resize(0);
 	p = NULL;
     } else {
-	size_t len;
-	decode_length_and_check(&p, end, len);
-	current_term.assign(p, len);
-	p += len;
+	if (!unpack_string(&p, end, current_term)) {
+	    unpack_throw_serialisation_error(p);
+	}
     }
 
     return NULL;

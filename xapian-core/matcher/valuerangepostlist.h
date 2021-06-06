@@ -1,4 +1,4 @@
-/** @file valuerangepostlist.h
+/** @file
  * @brief Return document ids matching a range test on a specified doc value.
  */
 /* Copyright 2007,2008,2009,2011 Olly Betts
@@ -23,7 +23,7 @@
 #ifndef XAPIAN_INCLUDED_VALUERANGEPOSTLIST_H
 #define XAPIAN_INCLUDED_VALUERANGEPOSTLIST_H
 
-#include "api/postlist.h"
+#include "backends/postlist.h"
 #include "backends/valuelist.h"
 #include "xapian/database.h"
 
@@ -66,7 +66,10 @@ class ValueRangePostList : public PostList {
     Xapian::docid get_docid() const;
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
+
+    Xapian::termcount get_wdfdocmax() const;
 
     double recalc_maxweight();
 

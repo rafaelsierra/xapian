@@ -1,4 +1,4 @@
-/** @file boolorpostlist.h
+/** @file
  * @brief PostList class implementing unweighted Query::OP_OR
  */
 /* Copyright 2017,2018 Olly Betts
@@ -21,7 +21,7 @@
 #ifndef XAPIAN_INCLUDED_BOOLORPOSTLIST_H
 #define XAPIAN_INCLUDED_BOOLORPOSTLIST_H
 
-#include "api/postlist.h"
+#include "backends/postlist.h"
 
 /// PostList class implementing unweighted Query::OP_OR
 class BoolOrPostList : public PostList {
@@ -133,7 +133,8 @@ class BoolOrPostList : public PostList {
     Xapian::docid get_docid() const;
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
 
     bool at_end() const;
 

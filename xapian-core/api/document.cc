@@ -1,4 +1,4 @@
-/** @file document.cc
+/** @file
  * @brief Class representing a document
  */
 /* Copyright 2008,2017,2018 Olly Betts
@@ -101,7 +101,7 @@ Document::remove_term(const string& term)
 	string m;
 	m = "Document::remove_term() failed - term '";
 	m += term;
-	m + "' not present";
+	m += "' not present";
 	throw Xapian::InvalidArgumentError(m);
     }
 }

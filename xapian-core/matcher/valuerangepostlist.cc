@@ -1,4 +1,4 @@
-/** @file valuerangepostlist.cc
+/** @file
  * @brief Return document ids matching a range test on a specified doc value.
  */
 /* Copyright 2007,2008,2009,2010,2011,2013,2016,2017 Olly Betts
@@ -138,7 +138,7 @@ ValueRangePostList::get_termfreq_est_using_stats(
     // begin and end like above?
     RETURN(TermFreqs(stats.collection_size / 2,
 		     stats.rset_size / 2,
-		     stats.total_term_count / 2));
+		     stats.total_length / 2));
 }
 
 Xapian::doccount
@@ -157,7 +157,15 @@ ValueRangePostList::get_docid() const
 
 double
 ValueRangePostList::get_weight(Xapian::termcount,
+			       Xapian::termcount,
 			       Xapian::termcount) const
+{
+    Assert(db);
+    return 0;
+}
+
+Xapian::termcount
+ValueRangePostList::get_wdfdocmax() const
 {
     Assert(db);
     return 0;

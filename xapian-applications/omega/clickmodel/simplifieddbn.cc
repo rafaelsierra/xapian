@@ -1,4 +1,4 @@
-/** @file simplifieddbn.cc
+/** @file
  * @brief SimplifiedDBN class - the Simplified DBN click model.
  */
 /* Copyright (C) 2017 Vivek Pal
@@ -106,7 +106,6 @@ SimplifiedDBN::build_sessions(const string &logfile)
 
     // Start reading file from the second line.
     while (getline(file, line)) {
-
 	istringstream ss(line);
 
 	vector<string> row_data;

@@ -1,5 +1,5 @@
 %{
-/** @file xapian-head.i
+/** @file
  * @brief Header for SWIG interface file for Xapian.
  */
 /* Copyright (C) 2005,2006,2007,2008,2009,2011,2012,2013,2014,2015,2016,2017 Olly Betts
@@ -77,8 +77,6 @@ using namespace std;
 #define XAPIAN_VISIBILITY_INTERNAL
 #define XAPIAN_CONST_FUNCTION
 #define XAPIAN_PURE_FUNCTION
-#define XAPIAN_NOEXCEPT
-#define XAPIAN_NOTHROW(D) D
 
 // This works around buggy behaviour in SWIG's preprocessor, and only works
 // because we currently only use XAPIAN_NONNULL() with an empty argument:

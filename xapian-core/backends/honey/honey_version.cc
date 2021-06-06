@@ -1,4 +1,4 @@
-/** @file honey_version.cc
+/** @file
  * @brief HoneyVersion class
  */
 /* Copyright (C) 2006,2007,2008,2009,2010,2013,2014,2015,2016,2017,2018 Olly Betts
@@ -100,7 +100,7 @@ HoneyVersion::HoneyVersion(int fd_)
       uniq_terms_lbound(0), uniq_terms_ubound(0)
 {
     offset = lseek(fd, 0, SEEK_CUR);
-    if (rare(offset == off_t(-1))) {
+    if (rare(offset < 0)) {
 	string msg = "lseek failed on file descriptor ";
 	msg += str(fd);
 	throw Xapian::DatabaseOpeningError(msg, errno);
@@ -122,7 +122,7 @@ HoneyVersion::read()
     FD close_fd(-1);
     int fd_in;
     if (single_file()) {
-	if (rare(lseek(fd, offset, SEEK_SET) == off_t(-1))) {
+	if (rare(lseek(fd, offset, SEEK_SET) < 0)) {
 	    string msg = "Failed to rewind file descriptor ";
 	    msg += str(fd);
 	    throw Xapian::DatabaseOpeningError(msg, errno);
@@ -135,6 +135,9 @@ HoneyVersion::read()
 	if (rare(fd_in < 0)) {
 	    string msg = filename;
 	    msg += ": Failed to open honey revision file for reading";
+	    if (errno == ENOENT || errno == ENOTDIR) {
+		throw Xapian::DatabaseNotFoundError(msg, errno);
+	    }
 	    throw Xapian::DatabaseOpeningError(msg, errno);
 	}
 	close_fd = fd_in;
@@ -142,8 +145,8 @@ HoneyVersion::read()
 
     char buf[256];
 
-    const char * p = buf;
-    const char * end = p + io_read(fd_in, buf, sizeof(buf), 33);
+    const char* p = buf;
+    const char* end = p + io_read(fd_in, buf, sizeof(buf), 33);
 
     if (memcmp(buf, HONEY_VERSION_MAGIC, HONEY_VERSION_MAGIC_LEN) != 0)
 	throw Xapian::DatabaseCorruptError("Rev file magic incorrect");
@@ -223,8 +226,8 @@ HoneyVersion::serialise_stats()
 void
 HoneyVersion::unserialise_stats()
 {
-    const char * p = serialised_stats.data();
-    const char * end = p + serialised_stats.size();
+    const char* p = serialised_stats.data();
+    const char* end = p + serialised_stats.size();
     if (p == end) {
 	doccount = 0;
 	total_doclen = 0;
@@ -247,7 +250,7 @@ HoneyVersion::unserialise_stats()
 	!unpack_uint(&p, end, &oldest_changeset) ||
 	!unpack_uint(&p, end, &total_doclen) ||
 	!unpack_uint(&p, end, &spelling_wordfreq_ubound)) {
-	const char * m = p ?
+	const char* m = p ?
 	    "Bad serialised DB stats (overflowed)" :
 	    "Bad serialised DB stats (out of data)";
 	throw Xapian::DatabaseCorruptError(m);
@@ -281,7 +284,7 @@ HoneyVersion::unserialise_stats()
 	}
     } else if (!unpack_uint(&p, end, &uniq_terms_lbound) ||
 	       !unpack_uint(&p, end, &uniq_terms_ubound)) {
-	const char * m = p ?
+	const char* m = p ?
 	    "Bad serialised unique_terms bounds (overflowed)" :
 	    "Bad serialised unique_terms bounds (out of data)";
 	throw Xapian::DatabaseCorruptError(m);
@@ -289,7 +292,7 @@ HoneyVersion::unserialise_stats()
 }
 
 void
-HoneyVersion::merge_stats(const HoneyVersion & o)
+HoneyVersion::merge_stats(const HoneyVersion& o)
 {
     doccount += o.get_doccount();
     if (doccount < o.get_doccount()) {
@@ -404,7 +407,7 @@ HoneyVersion::write(honey_revision_number_t new_rev, int flags)
 }
 
 bool
-HoneyVersion::sync(const string & tmpfile,
+HoneyVersion::sync(const string& tmpfile,
 		   honey_revision_number_t new_rev, int flags)
 {
     Assert(new_rev > rev || rev == 0);
@@ -455,8 +458,14 @@ HoneyVersion::sync(const string & tmpfile,
     return true;
 }
 
-// Only try to compress tags longer than this many bytes.
-const size_t COMPRESS_MIN = 4;
+/* Only try to compress tags strictly longer than this many bytes.
+ *
+ * This can theoretically usefully be set as low as 4, but in practical terms
+ * zlib can't compress in very many cases for short inputs and even when it can
+ * the savings are small, so we default to a higher threshold to save CPU time
+ * for marginal size reductions.
+ */
+const size_t COMPRESS_MIN = 18;
 
 static const uint4 compress_min_tab[] = {
     0, // POSTLIST
@@ -489,7 +498,7 @@ RootInfo::init(uint4 compress_min_)
 }
 
 void
-RootInfo::serialise(string &s) const
+RootInfo::serialise(string& s) const
 {
     AssertRel(offset, >=, 0);
     std::make_unsigned<off_t>::type uoffset = offset;
@@ -504,7 +513,7 @@ RootInfo::serialise(string &s) const
 }
 
 bool
-RootInfo::unserialise(const char ** p, const char * end)
+RootInfo::unserialise(const char** p, const char* end)
 {
     std::make_unsigned<off_t>::type uoffset, uroot;
     unsigned dummy_val;
@@ -522,6 +531,10 @@ RootInfo::unserialise(const char ** p, const char * end)
     // continue to work.
     (void)dummy_val;
     (void)dummy_blocksize;
+    // Map old default to new default.
+    if (compress_min == 4) {
+	compress_min = COMPRESS_MIN;
+    }
     return true;
 }
 

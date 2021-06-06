@@ -1,4 +1,4 @@
-/** @file ineb2weight.cc
+/** @file
  * @brief Xapian::IneB2Weight class - the IneB2 weighting scheme of the DFR framework.
  */
 /* Copyright (C) 2013,2014 Aarsh Shah
@@ -34,7 +34,7 @@ namespace Xapian {
 
 IneB2Weight::IneB2Weight(double c) : param_c(c) {
     if (param_c <= 0)
-	throw Xapian::InvalidArgumentError("Parameter c is invalid.");
+	throw Xapian::InvalidArgumentError("Parameter c is invalid");
     need_stat(AVERAGE_LENGTH);
     need_stat(DOC_LENGTH);
     need_stat(DOC_LENGTH_MIN);
@@ -121,7 +121,7 @@ IneB2Weight::unserialise(const string & s) const
 
 double
 IneB2Weight::get_sumpart(Xapian::termcount wdf, Xapian::termcount len,
-			 Xapian::termcount) const
+			 Xapian::termcount, Xapian::termcount) const
 {
     if (wdf == 0) return 0.0;
     double wdfn = wdf;
@@ -140,7 +140,9 @@ IneB2Weight::get_maxpart() const
 }
 
 double
-IneB2Weight::get_sumextra(Xapian::termcount, Xapian::termcount) const
+IneB2Weight::get_sumextra(Xapian::termcount,
+			  Xapian::termcount,
+			  Xapian::termcount) const
 {
     return 0;
 }
@@ -151,6 +153,12 @@ IneB2Weight::get_maxextra() const
     return 0;
 }
 
+static inline void
+parameter_error(const char* message)
+{
+    Xapian::Weight::Internal::parameter_error(message, "ineb2");
+}
+
 IneB2Weight *
 IneB2Weight::create_from_parameters(const char * p) const
 {
@@ -158,9 +166,9 @@ IneB2Weight::create_from_parameters(const char * p) const
 	return new Xapian::IneB2Weight();
     double k = 1.0;
     if (!Xapian::Weight::Internal::double_param(&p, &k))
-	Xapian::Weight::Internal::parameter_error("Parameter is invalid", "ineb2");
+	parameter_error("Parameter is invalid");
     if (*p)
-	Xapian::Weight::Internal::parameter_error("Extra data after parameter", "ineb2");
+	parameter_error("Extra data after parameter");
     return new Xapian::IneB2Weight(k);
 }
 

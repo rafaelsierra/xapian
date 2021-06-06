@@ -1,4 +1,4 @@
-/** @file honey_metadata.cc
+/** @file
  * @brief Access to metadata for a honey database.
  */
 /* Copyright (C) 2004,2005,2006,2007,2008,2009,2010,2011,2017 Olly Betts
@@ -78,18 +78,10 @@ HoneyMetadataTermList::get_termfreq() const
 					"not meaningful");
 }
 
-Xapian::termcount
-HoneyMetadataTermList::get_collection_freq() const
-{
-    throw Xapian::InvalidOperationError("HoneyMetadataTermList::"
-					"get_collection_freq() "
-					"not meaningful");
-}
-
-TermList *
+TermList*
 HoneyMetadataTermList::next()
 {
-    LOGCALL(DB, TermList *, "HoneyMetadataTermList::next", NO_ARGS);
+    LOGCALL(DB, TermList*, "HoneyMetadataTermList::next", NO_ARGS);
     Assert(!at_end());
 
     if (cursor->after_end()) {
@@ -108,10 +100,10 @@ HoneyMetadataTermList::next()
     RETURN(NULL);
 }
 
-TermList *
-HoneyMetadataTermList::skip_to(const string &key)
+TermList*
+HoneyMetadataTermList::skip_to(const string& key)
 {
-    LOGCALL(DB, TermList *, "HoneyMetadataTermList::skip_to", key);
+    LOGCALL(DB, TermList*, "HoneyMetadataTermList::skip_to", key);
     Assert(!at_end());
 
     // k is the table key (key is the user metadata key).

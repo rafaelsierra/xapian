@@ -1,4 +1,4 @@
-/** @file mime.cc
+/** @file
  * @brief Find MIME type for a file
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -48,7 +48,7 @@ built_in_mime_map(const string & ext)
 string
 mimetype_from_ext(const map<string, string> & mime_map, string ext)
 {
-    map<string,string>::const_iterator mt = mime_map.find(ext);
+    map<string, string>::const_iterator mt = mime_map.find(ext);
     if (mt != mime_map.end())
 	return mt->second;
 

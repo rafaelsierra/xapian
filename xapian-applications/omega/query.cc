@@ -1,11 +1,11 @@
-/** @file query.cc
+/** @file
  * @brief query executor for omega
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
  * Copyright 2001 James Aylett
  * Copyright 2001,2002 Ananova Ltd
  * Copyright 2002 Intercede 1749 Ltd
- * Copyright 2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2013,2014,2015,2016,2017,2018,2019 Olly Betts
+ * Copyright 2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2013,2014,2015,2016,2017,2018,2019,2020 Olly Betts
  * Copyright 2008 Thomas Viehmann
  *
  * This program is free software; you can redistribute it and/or
@@ -103,6 +103,9 @@ static int my_snprintf(char *str, size_t size, const char *format, ...)
 #define my_snprintf SNPRINTF
 #endif
 
+/// Map shard to DB parameter value and stats to allow docid mapping.
+vector<SubDB> subdbs;
+
 static bool query_parsed = false;
 static bool done_query = false;
 static Xapian::docid last = 0;
@@ -119,8 +122,8 @@ static Xapian::Query query;
 Xapian::Query::op default_op = Xapian::Query::OP_AND; // default matching mode
 
 // Maintain an explicit date_filter_set flag - date_filter.empty() will also
-// be true if a date filter is specified which simplies to Query::MatchNothing
-// at construction time.
+// be true if a date filter is specified which simplifies to
+// Query::MatchNothing at construction time.
 static bool date_filter_set = false;
 static Xapian::Query date_filter;
 
@@ -128,7 +131,7 @@ static Xapian::QueryParser qp;
 static Xapian::NumberRangeProcessor * size_rp = NULL;
 static Xapian::Stem *stemmer = NULL;
 
-static string eval_file(const string &fmtfile);
+static string eval_file(const string& fmtfile, bool* p_not_found = nullptr);
 
 static set<string> termset;
 
@@ -353,7 +356,10 @@ read_qp_flags(const string & opt_pfx, unsigned f)
 	    f |= mask;
 	}
     }
-    return f;
+    // Always enable FLAG_ACCUMULATE so that $stoplist and $unstem report
+    // values accumulated over all query strings parsed as part of a query, not
+    // just the last one parsed.
+    return f | Xapian::QueryParser::FLAG_ACCUMULATE;
 }
 
 static querytype
@@ -379,7 +385,7 @@ parse_queries(const string& oldp)
 	    qp.set_stemming_strategy(Xapian::QueryParser::STEM_ALL);
 	}
     }
-    qp.set_stopper(new MyStopper());
+    qp.set_stopper((new MyStopper())->release());
     qp.set_default_op(default_op);
     qp.set_database(db);
     // FIXME: provide a custom RP which handles size:10..20K, etc.
@@ -716,7 +722,7 @@ html_strip(const string &str)
 		skip = false;
 		continue;
 	    default:
-		if (! skip) res += ch;
+		if (!skip) res += ch;
 	}
     }
     return res;
@@ -930,7 +936,7 @@ static int percent;
 static double weight;
 static Xapian::doccount collapsed;
 
-static string print_caption(const string &fmt, const vector<string> &param);
+static string print_caption(const string& fmt, vector<string>& param);
 
 enum tagval {
 CMD_,
@@ -962,6 +968,7 @@ CMD_filters,
 CMD_filterterms,
 CMD_find,
 CMD_fmt,
+CMD_foreach,
 CMD_freq,
 CMD_ge,
 CMD_gt,
@@ -979,6 +986,9 @@ CMD_if,
 CMD_include,
 CMD_json,
 CMD_jsonarray,
+CMD_jsonbool,
+CMD_jsonobject,
+CMD_keys,
 CMD_last,
 CMD_lastpage,
 CMD_le,
@@ -1013,8 +1023,8 @@ CMD_prettyurl,
 CMD_query,
 CMD_querydescription,
 CMD_queryterms,
-CMD_range,
 CMD_random,
+CMD_range,
 CMD_record,
 CMD_relevant,
 CMD_relevants,
@@ -1068,16 +1078,16 @@ struct func_desc {
     struct func_attrib a;
 };
 
-#define N -1
+#define N (-1)
 #define M 'M'
 #define Q 'Q'
 // NB when adding a new command which ensures M or Q, update the list in
 // docs/omegascript.rst
-static struct func_desc func_tab[] = {
+static const struct func_desc func_tab[] = {
 //name minargs maxargs evalargs ensure
 {"",{CMD_,	   N, N, 0, 0}},// commented out code
 T(add,		   0, N, N, 0), // add a list of numbers
-T(addfilter,	   1, 1, N, 0), // add filter term
+T(addfilter,	   1, 2, N, 0), // add filter term
 T(allterms,	   0, 1, N, 0), // list of all terms matching document
 T(and,		   1, N, 0, 0), // logical shortcutting and of a list of values
 T(cgi,		   1, 1, N, 0), // return cgi parameter value
@@ -1105,6 +1115,7 @@ T(filters,	   0, 0, N, 0), // serialisation of current filters
 T(filterterms,	   1, 1, N, 0), // list of terms with a given prefix
 T(find,		   2, 2, N, 0), // find entry in list
 T(fmt,		   0, 0, N, 0), // name of current format
+T(foreach,	   2, 2, 1, 0), // evaluate something for every entry in a list
 T(freq,		   1, 1, N, 0), // frequency of a term
 T(ge,		   2, 2, N, 0), // test >=
 T(gt,		   2, 2, N, 0), // test >
@@ -1118,10 +1129,13 @@ T(html,		   1, 1, N, 0), // html escape string (<>&")
 T(htmlstrip,	   1, 1, N, 0), // html strip tags string (s/<[^>]*>?//g)
 T(httpheader,	   2, 2, N, 0), // arbitrary HTTP header
 T(id,		   0, 0, N, 0), // docid of current doc
-T(if,		   2, 3, 1, 0), // conditional
-T(include,	   1, 1, 1, 0), // include another file
+T(if,		   1, 3, 1, 0), // conditional
+T(include,	   1, 2, 1, 0), // include another file
 T(json,		   1, 1, N, 0), // JSON string escaping
-T(jsonarray,	   1, 1, N, 0), // Format list as a JSON array of strings
+T(jsonarray,	   1, 2, 1, 0), // Format list as a JSON array
+T(jsonbool,	   1, 1, 1, 0), // Format list as a JSON bool
+T(jsonobject,	   1, 3, 1, 0), // Format map as JSON object
+T(keys,		   1, 1, N, 0), // list of keys from a map
 T(last,		   0, 0, N, M), // hit number one beyond end of current page
 T(lastpage,	   0, 0, N, M), // number of last hit page
 T(le,		   2, 2, N, 0), // test <=
@@ -1156,8 +1170,8 @@ T(prettyurl,	   1, 1, N, 0), // pretty version of URL
 T(query,	   0, 1, N, Q), // query
 T(querydescription,0, 0, N, M), // query.get_description() (run_query() adds filters so M)
 T(queryterms,	   0, 0, N, Q), // list of query terms
-T(range,	   2, 2, N, 0), // return list of values between start and end
 T(random,	   1, 1, N, 0), // return a random number
+T(range,	   2, 2, N, 0), // return list of values between start and end
 T(record,	   0, 1, N, 0), // record contents of document
 T(relevant,	   0, 1, N, Q), // is document relevant?
 T(relevants,	   0, 0, N, Q), // return list of relevant documents
@@ -1165,7 +1179,7 @@ T(score,	   0, 0, N, 0), // score (0-10) of current hit
 T(set,		   2, 2, N, 0), // set option value
 T(seterror,	   1, 1, N, 0), // set error_msg, setting it early stops query execution
 T(setmap,	   1, N, N, 0), // set map of option values
-T(setrelevant,	   0, 1, N, Q), // set rset
+T(setrelevant,	   1, 1, N, Q), // set rset
 T(slice,	   2, 2, N, 0), // slice a list using a second list
 T(snippet,	   1, 6, N, M), // generate snippet from text
 T(sort,		   1, 2, N, 0), // alpha sort a list
@@ -1223,33 +1237,40 @@ write_all(int fd, const char * buf, size_t count)
     return 0;
 }
 
-static const vector<string>&
-get_subdbs()
-{
-    static vector<string> subdbs;
-    if (subdbs.empty()) {
-	size_t p = 0, q;
-	while (true) {
-	    q = dbname.find('/', p);
-	    subdbs.emplace_back(dbname, p, q - p);
-	    if (q == string::npos) break;
-	    p = q + 1;
-	}
-    }
-    return subdbs;
-}
-
 // mersenne twister for RNG
 static mt19937 rng;
 static bool seed_set = false;
 
+static string eval(const string& fmt, vector<string>& param);
+
+/** Implements $foreach{} and $map{}. */
 static string
-eval(const string &fmt, const vector<string> &param)
+foreach(const string& list,
+	const string& pat,
+	vector<string>& param,
+	char sep = '\0')
+{
+    string result;
+    string saved_arg0 = std::move(param[0]);
+    string::size_type i = 0, j;
+    while (true) {
+	j = list.find('\t', i);
+	param[0].assign(list, i, j - i);
+	result += eval(pat, param);
+	if (j == string::npos) break;
+	if (sep) result += sep;
+	i = j + 1;
+    }
+    param[0] = std::move(saved_arg0);
+    return result;
+}
+
+static string
+eval(const string& fmt, vector<string>& param)
 {
     static map<string, const struct func_attrib *> func_map;
     if (func_map.empty()) {
-	struct func_desc *p;
-	for (p = func_tab; p->name != NULL; ++p) {
+	for (auto p = func_tab; p->name != NULL; ++p) {
 	    func_map[string(p->name)] = &(p->a);
 	}
     }
@@ -1370,7 +1391,16 @@ eval(const string &fmt, const vector<string> &param)
 		break;
 	    }
 	    case CMD_addfilter:
-		add_bterm(args[0]);
+		if (args.size() == 1 || args[1].empty() || args[1] == "B") {
+		    add_bterm(args[0]);
+		} else if (args[1] == "N") {
+		    add_nterm(args[0]);
+		} else {
+		    string msg = "Invalid $addfilter type '";
+		    msg += args[1];
+		    msg += "'";
+		    throw msg;
+		}
 		break;
 	    case CMD_allterms: {
 		// list of all terms indexing document
@@ -1555,6 +1585,7 @@ eval(const string &fmt, const vector<string> &param)
 		break;
 	    }
 	    case CMD_filesize: {
+		if (args[0].empty()) break;
 		// FIXME: rounding?  i18n?
 		int size;
 		if (!parse_signed(args[0].c_str(), size)) {
@@ -1636,6 +1667,11 @@ eval(const string &fmt, const vector<string> &param)
 	    case CMD_fmt:
 		value = fmtname;
 		break;
+	    case CMD_foreach:
+		if (!args[0].empty()) {
+		    value = foreach(args[0], args[1], param);
+		}
+		break;
 	    case CMD_freq: {
 		const string& term = args[0];
 		Xapian::doccount termfreq = 0;
@@ -1712,22 +1748,22 @@ eval(const string &fmt, const vector<string> &param)
 		    int ch;
 		    while ((ch = *q++) != '\0') {
 			switch (ch) {
-			 case '+':
+			  case '+':
 			    url_query_string += "%2b";
 			    break;
-			 case '"':
+			  case '"':
 			    url_query_string += "%22";
 			    break;
-			 case '%':
+			  case '%':
 			    url_query_string += "%25";
 			    break;
-			 case '&':
+			  case '&':
 			    url_query_string += "%26";
 			    break;
-			 case ' ':
+			  case ' ':
 			    ch = '+';
 			    /* fall through */
-			 default:
+			  default:
 			    url_query_string += ch;
 			}
 		    }
@@ -1781,14 +1817,23 @@ eval(const string &fmt, const vector<string> &param)
 		value = str(q0);
 		break;
 	    case CMD_if:
-		if (!args[0].empty())
+		if (args.size() > 1 && !args[0].empty())
 		    value = eval(args[1], param);
 		else if (args.size() > 2)
 		    value = eval(args[2], param);
 		break;
-	    case CMD_include:
-		value = eval_file(args[0]);
+	    case CMD_include: {
+		if (args.size() == 1) {
+		    value = eval_file(args[0]);
+		} else {
+		    bool fallback = false;
+		    value = eval_file(args[0], &fallback);
+		    if (fallback) {
+			value = eval(args[1], param);
+		    }
+		}
 		break;
+	    }
 	    case CMD_json:
 		value = args[0];
 		json_escape(value);
@@ -1800,17 +1845,80 @@ eval(const string &fmt, const vector<string> &param)
 		    value = "[]";
 		    break;
 		}
-		value = "[\"";
+		vector<string> new_args(1);
+		value = "[";
 		while (true) {
 		    j = l.find('\t', i);
 		    string elt(l, i, j - i);
-		    json_escape(elt);
-		    value += elt;
+		    if (args.size() == 1) {
+			value += '"';
+			json_escape(elt);
+			value += elt;
+			value += '"';
+		    } else {
+			new_args[0] = std::move(elt);
+			value += eval(args[1], new_args);
+		    }
 		    if (j == string::npos) break;
-		    value += "\",\"";
+		    value += ',';
 		    i = j + 1;
 		}
-		value += "\"]";
+		value += ']';
+		break;
+	    }
+	    case CMD_jsonbool:
+		value = args[0].empty() ? "false" : "true";
+		break;
+	    case CMD_jsonobject: {
+		vector<string> new_args;
+		new_args.push_back(string());
+
+		class map_range {
+		    typedef map<string, string>::const_iterator iterator;
+		    iterator b, e;
+
+		  public:
+		    map_range(iterator b_, iterator e_) : b(b_), e(e_) {}
+
+		    iterator begin() const { return b; }
+		    iterator end() const { return e; }
+		};
+
+		string prefix = args[0] + ',';
+		auto b = option.lower_bound(prefix);
+		++prefix.back();
+		auto e = option.lower_bound(prefix);
+		value = to_json(map_range(b, e),
+				[&](const string& k) {
+				    string key(k, prefix.size());
+				    if (args.size() > 1 && !args[1].empty()) {
+					new_args[0] = std::move(key);
+					key = eval(args[1], new_args);
+				    }
+				    return key;
+				},
+				[&](const string& v) {
+				    if (args.size() > 2 && !args[2].empty()) {
+					new_args[0] = v;
+					return eval(args[2], new_args);
+				    }
+				    string r(1, '"');
+				    string elt = v;
+				    json_escape(elt);
+				    r += elt;
+				    r += '"';
+				    return r;
+				});
+		break;
+	    }
+	    case CMD_keys: {
+		string prefix = args[0] + ',';
+		auto i = option.lower_bound(prefix);
+		for (; i != option.end() && startswith(i->first, prefix); ++i) {
+		    const string& key = i->first;
+		    if (!value.empty()) value += '\t';
+		    value.append(key, prefix.size(), string::npos);
+		}
 		break;
 	    }
 	    case CMD_last:
@@ -1872,10 +1980,17 @@ eval(const string &fmt, const vector<string> &param)
 		break;
 	    }
 	    case CMD_log: {
-		if (!vet_filename(args[0])) break;
+		if (!vet_filename(args[0])) {
+		    value = "filename can't contain \"..\"";
+		    break;
+		}
 		string logfile = log_dir + args[0];
 		int fd = open(logfile.c_str(), O_CREAT|O_APPEND|O_WRONLY, 0644);
-		if (fd == -1) break;
+		if (fd == -1) {
+		    value = "open failed: ";
+		    value += strerror(errno);
+		    break;
+		}
 		vector<string> noargs;
 		noargs.resize(1);
 		string line;
@@ -1886,7 +2001,10 @@ eval(const string &fmt, const vector<string> &param)
 		}
 		line = eval(line, noargs);
 		line += '\n';
-		(void)write_all(fd, line.data(), line.length());
+		if (write_all(fd, line.data(), line.length()) < 0) {
+		    value = "write failed: ";
+		    value += strerror(errno);
+		}
 		close(fd);
 		break;
 	    }
@@ -1897,12 +2015,15 @@ eval(const string &fmt, const vector<string> &param)
 		if (fd == -1) break;
 
 		struct cdb cdb;
-		cdb_init(&cdb, fd);
+		if (cdb_init(&cdb, fd) < 0) {
+		    close(fd);
+		    break;
+		}
 
 		if (cdb_find(&cdb, args[1].data(), args[1].length()) > 0) {
 		    size_t datalen = cdb_datalen(&cdb);
 		    const void *dat = cdb_get(&cdb, datalen, cdb_datapos(&cdb));
-		    if (q) {
+		    if (dat) {
 			value.assign(static_cast<const char *>(dat), datalen);
 		    }
 		}
@@ -1920,17 +2041,7 @@ eval(const string &fmt, const vector<string> &param)
 		break;
 	    case CMD_map:
 		if (!args[0].empty()) {
-		    string l = args[0], pat = args[1];
-		    vector<string> new_args(param);
-		    string::size_type i = 0, j;
-		    while (true) {
-			j = l.find('\t', i);
-			new_args[0] = l.substr(i, j - i);
-			value += eval(pat, new_args);
-			if (j == string::npos) break;
-			value += '\t';
-			i = j + 1;
-		    }
+		    value = foreach(args[0], args[1], param, '\t');
 		}
 		break;
 	    case CMD_match:
@@ -1956,6 +2067,15 @@ eval(const string &fmt, const vector<string> &param)
 		value = str(val);
 		break;
 	    }
+	    case CMD_mod: {
+		int denom = string_to_int(args[1]);
+		if (denom == 0) {
+		    value = "divide by 0";
+		} else {
+		    value = str(string_to_int(args[0]) % denom);
+		}
+		break;
+	    }
 	    case CMD_msize:
 		// Estimated number of matches.
 		value = str(mset.get_matches_estimated());
@@ -1974,15 +2094,6 @@ eval(const string &fmt, const vector<string> &param)
 		// Upper bound on number of matches.
 		value = str(mset.get_matches_upper_bound());
 		break;
-	    case CMD_mod: {
-		int denom = string_to_int(args[1]);
-		if (denom == 0) {
-		    value = "divide by 0";
-		} else {
-		    value = str(string_to_int(args[0]) % denom);
-		}
-		break;
-	    }
 	    case CMD_mul: {
 		vector<string>::const_iterator i = args.begin();
 		int total = string_to_int(*i++);
@@ -2082,6 +2193,17 @@ eval(const string &fmt, const vector<string> &param)
 	    case CMD_queryterms:
 		value = queryterms;
 		break;
+	    case CMD_random: {
+		if (!seed_set) {
+		    random_device rd;
+		    rng.seed(rd());
+		    seed_set = true;
+		}
+		uniform_int_distribution<int>
+		    distr(0, string_to_int(args[0]));
+		value = str(distr(rng));
+		break;
+	    }
 	    case CMD_range: {
 		int start, end;
 		if (!parse_signed(args[0].c_str(), start)) {
@@ -2097,17 +2219,6 @@ eval(const string &fmt, const vector<string> &param)
 		    if (start < end) value += '\t';
 		    start++;
 		}
-		break;
-	    }
-	    case CMD_random: {
-		if (!seed_set) {
-		    random_device rd;
-		    rng.seed(rd());
-		    seed_set = true;
-		}
-		uniform_int_distribution<int>
-		    distr(0, string_to_int(args[0]));
-		value = str(distr(rng));
 		break;
 	    }
 	    case CMD_record: {
@@ -2313,8 +2424,7 @@ eval(const string &fmt, const vector<string> &param)
 		    (!parse_unsigned(args[0].c_str(), id) || id == 0)) {
 		    throw "Document id of the subdb command should be > 0";
 		}
-		auto subdbs = get_subdbs();
-		value = subdbs[(id - 1) % subdbs.size()];
+		value = subdbs[(id - 1) % subdbs.size()].get_name();
 		break;
 	    }
 	    case CMD_subid: {
@@ -2323,7 +2433,13 @@ eval(const string &fmt, const vector<string> &param)
 		    (!parse_unsigned(args[0].c_str(), id) || id == 0)) {
 		    throw "Document id of the subid command should be > 0";
 		}
-		value = str(((id - 1) / get_subdbs().size()) + 1);
+		// This is the docid in the single shard.
+		Xapian::docid shard_did = (id - 1) / subdbs.size() + 1;
+		// We now need to map this back to the docid in the collection
+		// of shards specified by the DB parameter value which $subdb
+		// returns.
+		const SubDB& subdb = subdbs[(id - 1) % subdbs.size()];
+		value = str(subdb.map_docid(shard_did));
 		break;
 	    }
 	    case CMD_substr: {
@@ -2485,7 +2601,7 @@ eval(const string &fmt, const vector<string> &param)
 	    case CMD_truncate: {
 		unsigned int length;
 		if (!parse_unsigned(args[1].c_str(), length)) {
-		    throw "Length for truncate command must be >= 0 ";
+		    throw "Length for truncate command must be >= 0";
 		}
 		value = generate_sample(args[0],
 					length,
@@ -2586,7 +2702,7 @@ eval(const string &fmt, const vector<string> &param)
     } catch (const Xapian::Error & e) {
 	// FIXME: this means we only see the most recent error in $error
 	// - is that the best approach?
-	error_msg = e.get_msg();
+	error_msg = e.get_description();
     }
 
     res.append(fmt, p, string::npos);
@@ -2594,25 +2710,34 @@ eval(const string &fmt, const vector<string> &param)
 }
 
 static string
-eval_file(const string &fmtfile)
+eval_file(const string& fmtfile, bool* p_not_found)
 {
-    string err;
+    // Use -1 to indicate vet_filename() failed.
+    int eno = -1;
     if (vet_filename(fmtfile)) {
 	string file = template_dir + fmtfile;
 	string fmt;
+	errno = 0;
 	if (load_file(file, fmt)) {
 	    vector<string> noargs;
 	    noargs.resize(1);
 	    return eval(fmt, noargs);
 	}
-	err = strerror(errno);
-    } else {
-	err = "name contains '..'";
+	eno = errno;
+    }
+
+    if (p_not_found) {
+	*p_not_found = true;
+	return string();
     }
 
     // FIXME: report why!
     string msg = string("Couldn't read format template '") + fmtfile + '\'';
-    if (!err.empty()) msg += " (" + err + ')';
+    if (eno) {
+	msg += " (";
+	msg += (eno < 0 ? "name contains '..'" : strerror(eno));
+	msg += ')';
+    }
     throw msg;
 }
 
@@ -2671,7 +2796,7 @@ pretty_term(string term)
 }
 
 static string
-print_caption(const string &fmt, const vector<string> &param)
+print_caption(const string& fmt, vector<string>& param)
 {
     q0 = *(mset[hit_no]);
 
@@ -2686,12 +2811,6 @@ void
 parse_omegascript()
 {
     try {
-	const char * p = getenv("SERVER_PROTOCOL");
-	if (p && strcmp(p, "INCLUDED") == 0) {
-	    // We're being included in another page, so suppress headers.
-	    suppress_http_headers = true;
-	}
-
 	string output = eval_file(fmtname);
 	if (!set_content_type && !suppress_http_headers) {
 	    cout << "Content-Type: text/html" << endl;

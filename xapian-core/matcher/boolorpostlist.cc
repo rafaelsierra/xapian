@@ -1,4 +1,4 @@
-/** @file boolorpostlist.cc
+/** @file
  * @brief PostList class implementing unweighted Query::OP_OR
  */
 /* Copyright 2017,2018 Olly Betts
@@ -59,7 +59,9 @@ BoolOrPostList::get_docid() const
 }
 
 double
-BoolOrPostList::get_weight(Xapian::termcount, Xapian::termcount) const
+BoolOrPostList::get_weight(Xapian::termcount,
+			   Xapian::termcount,
+			   Xapian::termcount) const
 {
     return 0;
 }
@@ -208,7 +210,11 @@ BoolOrPostList::get_termfreq_est_using_stats(
 	rtf_scale = 1.0 / stats.rset_size;
     }
     double Pr_est = freqs.reltermfreq * rtf_scale;
-    double cf_scale = 1.0 / stats.total_term_count;
+    // If total_length is 0, cf must always be 0 so cf_scale is irrelevant.
+    double cf_scale = 0.0;
+    if (usual(stats.total_length != 0)) {
+	cf_scale = 1.0 / stats.total_length;
+    }
     double Pc_est = freqs.collfreq * cf_scale;
 
     for (size_t i = 1; i < n_kids; ++i) {
@@ -226,7 +232,7 @@ BoolOrPostList::get_termfreq_est_using_stats(
     }
     return TermFreqs(Xapian::doccount(P_est * stats.collection_size + 0.5),
 		     Xapian::doccount(Pr_est * stats.rset_size + 0.5),
-		     Xapian::termcount(Pc_est * stats.total_term_count + 0.5));
+		     Xapian::termcount(Pc_est * stats.total_length + 0.5));
 }
 
 bool

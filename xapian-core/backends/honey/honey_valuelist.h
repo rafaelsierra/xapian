@@ -1,4 +1,4 @@
-/** @file honey_valuelist.h
+/** @file
  * @brief Honey class for value streams.
  */
 /* Copyright (C) 2007,2008,2009,2011 Olly Betts
@@ -30,12 +30,12 @@ class HoneyDatabase;
 /// Honey class for value streams.
 class HoneyValueList : public Xapian::ValueIterator::Internal {
     /// Don't allow assignment.
-    void operator=(const HoneyValueList &);
+    void operator=(const HoneyValueList&);
 
     /// Don't allow copying.
-    HoneyValueList(const HoneyValueList &);
+    HoneyValueList(const HoneyValueList&);
 
-    HoneyCursor * cursor;
+    HoneyCursor* cursor;
 
     Honey::ValueChunkReader reader;
 

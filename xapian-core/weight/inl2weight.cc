@@ -1,4 +1,4 @@
-/** @file inl2weight.cc
+/** @file
  * @brief Xapian::InL2Weight class - the InL2 weighting scheme of the DFR framework.
  */
 /* Copyright (C) 2013,2014 Aarsh Shah
@@ -36,7 +36,7 @@ InL2Weight::InL2Weight(double c)
     : param_c(c)
 {
     if (param_c <= 0)
-	throw Xapian::InvalidArgumentError("Parameter c is invalid.");
+	throw Xapian::InvalidArgumentError("Parameter c is invalid");
     need_stat(AVERAGE_LENGTH);
     need_stat(DOC_LENGTH);
     need_stat(DOC_LENGTH_MIN);
@@ -68,18 +68,18 @@ InL2Weight::init(double factor)
 	return;
     }
 
-    double termfrequency = get_termfreq();
+    double termfreq = get_termfreq();
     double N = get_collection_size();
 
     wdfn_upper *= log2(1 + (param_c * get_average_length()) /
-		    get_doclength_lower_bound());
+		       get_doclength_lower_bound());
 
     // wdfn * L = wdfn / (wdfn + 1) = 1 / (1 + 1 / wdfn).
     // To maximize the product, we need to minimize the denominator and so we use wdfn_upper in (1 / wdfn).
     double maximum_wdfn_product_L = wdfn_upper / (wdfn_upper + 1.0);
 
     // This term is constant for all documents.
-    double idf_max = log2((N + 1) / (termfrequency + 0.5));
+    double idf_max = log2((N + 1) / (termfreq + 0.5));
 
     /* Calculate constant values to be used in get_sumpart() upfront. */
     wqf_product_idf = get_wqf() * idf_max * factor;
@@ -119,7 +119,7 @@ InL2Weight::unserialise(const string & s) const
 
 double
 InL2Weight::get_sumpart(Xapian::termcount wdf, Xapian::termcount len,
-			Xapian::termcount) const
+			Xapian::termcount, Xapian::termcount) const
 {
     if (wdf == 0) return 0.0;
     double wdfn = wdf;
@@ -138,7 +138,9 @@ InL2Weight::get_maxpart() const
 }
 
 double
-InL2Weight::get_sumextra(Xapian::termcount, Xapian::termcount) const
+InL2Weight::get_sumextra(Xapian::termcount,
+			 Xapian::termcount,
+			 Xapian::termcount) const
 {
     return 0;
 }
@@ -149,6 +151,12 @@ InL2Weight::get_maxextra() const
     return 0;
 }
 
+static inline void
+parameter_error(const char* message)
+{
+    Xapian::Weight::Internal::parameter_error(message, "inl2");
+}
+
 InL2Weight *
 InL2Weight::create_from_parameters(const char * p) const
 {
@@ -156,9 +164,9 @@ InL2Weight::create_from_parameters(const char * p) const
 	return new Xapian::InL2Weight();
     double k = 1.0;
     if (!Xapian::Weight::Internal::double_param(&p, &k))
-	Xapian::Weight::Internal::parameter_error("Parameter is invalid", "inl2");
+	parameter_error("Parameter is invalid");
     if (*p)
-	Xapian::Weight::Internal::parameter_error("Extra data after parameter", "inl2");
+	parameter_error("Extra data after parameter");
     return new Xapian::InL2Weight(k);
 }
 

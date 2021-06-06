@@ -1,4 +1,4 @@
-/** @file honey_database.h
+/** @file
  * @brief Database using honey backend
  */
 /* Copyright 2004,2006,2007,2008,2009,2011,2014,2015,2016,2017 Olly Betts
@@ -110,6 +110,9 @@ class HoneyDatabase : public Xapian::Database::Internal {
      *  @param did  The document id of the document to return this value for.
      */
     Xapian::termcount get_unique_terms(Xapian::docid did) const;
+
+    // Return the max_wdf in the document
+    Xapian::termcount get_wdfdocmax(Xapian::docid did) const;
 
     /** Returns frequencies for a term.
      *

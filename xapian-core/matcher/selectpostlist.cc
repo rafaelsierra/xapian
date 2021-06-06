@@ -1,4 +1,4 @@
-/** @file selectpostlist.cc
+/** @file
  * @brief Base class for classes which filter another PostList
  */
 /* Copyright 2017 Olly Betts
@@ -39,7 +39,11 @@ SelectPostList::vet(double w_min)
     if (w_min <= 0.0) {
 	cached_weight = -HUGE_VAL;
     } else {
-	cached_weight = pltree->get_weight();
+	Xapian::termcount doclen = 0;
+	Xapian::termcount unique_terms = 0;
+	Xapian::termcount wdfdocmax = 0;
+	pltree->get_doc_stats(pl->get_docid(), doclen, unique_terms, wdfdocmax);
+	cached_weight = pl->get_weight(doclen, unique_terms, wdfdocmax);
 	if (cached_weight < w_min)
 	    return false;
     }
@@ -48,11 +52,12 @@ SelectPostList::vet(double w_min)
 
 double
 SelectPostList::get_weight(Xapian::termcount doclen,
-			   Xapian::termcount unique_terms) const
+			   Xapian::termcount unique_terms,
+			   Xapian::termcount wdfdocmax) const
 {
     if (cached_weight >= 0)
 	return cached_weight;
-    return pl->get_weight(doclen, unique_terms);
+    return pl->get_weight(doclen, unique_terms, wdfdocmax);
 }
 
 bool

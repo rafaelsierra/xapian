@@ -1,4 +1,4 @@
-/** @file testrunner.cc
+/** @file
  * @brief Run multiple tests for different backends.
  */
 /* Copyright 2008,2009 Lemur Consulting Ltd
@@ -79,14 +79,26 @@ TestRunner::set_properties_for_backend(const string & backend_name)
 	{ "multi_glass", MULTI|
 	    BACKEND|POSITIONAL|WRITABLE|METADATA|
 	    SYNONYMS|VALUESTATS|GENERATED|COMPACT|PATH },
+	{ "multi_glass_remoteprog_glass", MULTI|
+	    BACKEND|REMOTE|WRITABLE|GENERATED|SYNONYMS },
+	{ "multi_remoteprog_glass", MULTI|
+	    BACKEND|REMOTE|WRITABLE|GENERATED|SYNONYMS },
 	{ "remoteprog_glass", REMOTE|
-	    BACKEND|TRANSACTIONS|POSITIONAL|WRITABLE|METADATA|VALUESTATS },
+	    BACKEND|TRANSACTIONS|POSITIONAL|WRITABLE|METADATA|VALUESTATS|
+	    GENERATED|SYNONYMS
+	},
 	{ "remotetcp_glass", REMOTE|
-	    BACKEND|TRANSACTIONS|POSITIONAL|WRITABLE|METADATA|VALUESTATS },
+	    BACKEND|TRANSACTIONS|POSITIONAL|WRITABLE|METADATA|VALUESTATS|
+	    GENERATED|SYNONYMS
+	},
 	{ "singlefile_glass", SINGLEFILE|
 	    BACKEND|POSITIONAL|VALUESTATS|COMPACT|PATH },
 	{ "honey", HONEY|
-	    BACKEND|POSITIONAL|VALUESTATS|COMPACT|PATH },
+	    BACKEND|POSITIONAL|VALUESTATS|COMPACT|PATH
+#ifdef XAPIAN_HAS_GLASS_BACKEND
+	    |GENERATED
+#endif
+	},
 	{ NULL, 0 }
     };
 
@@ -124,7 +136,14 @@ TestRunner::run_tests(int argc, char ** argv)
 	string datadir = srcdir + "/testdata/";
 
 #ifdef XAPIAN_HAS_HONEY_BACKEND
+# ifdef XAPIAN_HAS_GLASS_BACKEND
+	{
+	    BackendManagerGlass glass_man(datadir);
+	    do_tests_for_backend(BackendManagerHoney(datadir, &glass_man));
+	}
+# else
 	do_tests_for_backend(BackendManagerHoney(datadir));
+# endif
 #endif
 
 	do_tests_for_backend(BackendManager(string()));
@@ -136,10 +155,26 @@ TestRunner::run_tests(int argc, char ** argv)
 #ifdef XAPIAN_HAS_GLASS_BACKEND
 	{
 	    BackendManagerGlass glass_man(datadir);
+
+	    // Vector for multi backendmanagers.
+	    vector<BackendManager*> multi_mans;
+	    multi_mans = {&glass_man, &glass_man};
+
 	    do_tests_for_backend(glass_man);
 	    do_tests_for_backend(BackendManagerSingleFile(datadir, &glass_man));
-	    do_tests_for_backend(BackendManagerMulti(datadir, &glass_man));
+	    do_tests_for_backend(BackendManagerMulti(datadir, multi_mans));
 # ifdef XAPIAN_HAS_REMOTE_BACKEND
+	    BackendManagerGlass sub_glass_man(datadir);
+	    BackendManagerRemoteProg remoteprog_glass_man(&sub_glass_man);
+
+	    multi_mans = {&glass_man, &remoteprog_glass_man};
+
+	    do_tests_for_backend(BackendManagerMulti(datadir, multi_mans));
+
+	    multi_mans = {&remoteprog_glass_man, &remoteprog_glass_man};
+
+	    do_tests_for_backend(BackendManagerMulti(datadir, multi_mans));
+
 	    do_tests_for_backend(BackendManagerRemoteProg(&glass_man));
 	    do_tests_for_backend(BackendManagerRemoteTcp(&glass_man));
 # endif

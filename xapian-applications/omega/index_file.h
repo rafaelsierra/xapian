@@ -1,10 +1,11 @@
-/** @file index_file.h
+/** @file
  * @brief Handle indexing a document from a file
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
  * Copyright 2001,2005 James Aylett
  * Copyright 2001,2002 Ananova Ltd
  * Copyright 2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2017,2019 Olly Betts
+ * Copyright 2019 Bruno Baruffaldi
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -30,6 +31,7 @@
 #include <string>
 #include <xapian.h>
 
+class Worker;
 class DirectoryIterator;
 
 enum skip_flags { SKIP_VERBOSE_ONLY = 0x01, SKIP_SHOW_FILENAME = 0x02 };
@@ -55,7 +57,10 @@ struct Filter {
 	SEEK_DEV_STDIN = 8
     };
     unsigned flags = 0;
-    Filter() : cmd(), output_type() { }
+    /** Set if this is a mapping for a worker sub-process. */
+    Worker* worker = nullptr;
+
+    Filter() { }
     explicit Filter(const std::string & cmd_, unsigned flags_ = 0)
 	: cmd(cmd_), output_type(), flags(flags_) { }
     Filter(const std::string & cmd_, const std::string & output_type_,
@@ -66,6 +71,7 @@ struct Filter {
 	   unsigned flags_ = 0)
 	: cmd(cmd_), output_type(output_type_),
 	  output_charset(output_charset_), flags(flags_) { }
+    explicit Filter(Worker* worker_) : worker(worker_) { }
     bool use_shell() const { return flags & USE_SHELL; }
     bool input_on_stdin() const {
 #ifdef HAVE_DEV_STDIN
@@ -84,6 +90,12 @@ struct Filter {
 };
 
 extern std::map<std::string, Filter> commands;
+
+inline void
+index_library(const std::string& type, Worker* worker)
+{
+    commands[type] = Filter(worker);
+}
 
 inline void
 index_command(const std::string & type, const Filter & filter)
@@ -105,6 +117,10 @@ skip(const std::string & urlterm, const std::string & context,
 /// Call index_command() to set up the default command filters.
 void
 index_add_default_filters();
+
+/// Call to set up the default libraries.
+void
+index_add_default_libraries();
 
 /// Initialise.
 void

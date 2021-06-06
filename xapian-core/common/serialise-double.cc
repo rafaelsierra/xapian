@@ -1,4 +1,4 @@
-/** @file serialise-double.cc
+/** @file
  * @brief functions to serialise and unserialise a double
  */
 /* Copyright (C) 2006,2007,2008,2009,2015 Olly Betts
@@ -36,6 +36,7 @@
 #include <cmath>
 
 #include <algorithm>
+#include <limits>
 #include <string>
 
 using namespace std;
@@ -79,9 +80,9 @@ double unserialise_double(const char ** p, const char * end)
 
 #else
 
-string serialise_double(double v){
-    /*
-     * First bit(msb) -> sign (1 means negative)
+string serialise_double(double v)
+{
+    /* First bit(msb) -> sign (1 means negative)
      * next 11 bits -> exponent
      * last 52 bits -> mantissa
      *

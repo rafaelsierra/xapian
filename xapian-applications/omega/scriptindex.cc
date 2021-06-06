@@ -1,10 +1,10 @@
-/** @file scriptindex.cc
+/** @file
  * @brief index arbitrary data as described by an index script
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
  * Copyright 2001 Sam Liddicott
  * Copyright 2001,2002 Ananova Ltd
- * Copyright 2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2014,2015,2017,2018 Olly Betts
+ * Copyright 2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2014,2015,2017,2018,2019 Olly Betts
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -43,16 +43,16 @@
 #include <ctime>
 
 #include "commonhelp.h"
+#include "datetime.h"
 #include "hashterm.h"
+#include "htmlparser.h"
 #include "loadfile.h"
-#include "myhtmlparse.h"
 #include "parseint.h"
 #include "setenv.h"
 #include "str.h"
 #include "stringutils.h"
 #include "timegm.h"
 #include "utf8truncate.h"
-#include "utils.h"
 #include "values.h"
 
 #ifndef HAVE_STRPTIME
@@ -80,33 +80,81 @@ prefix_needs_colon(const string & prefix, unsigned ch)
 }
 
 const char * action_names[] = {
-    "bad", "new",
-    "boolean", "date", "field", "hash", "hextobin", "index", "indexnopos",
-    "load", "lower", "parsedate", "spell", "split", "truncate", "unhtml",
-    "unique", "value", "valuenumeric", "valuepacked", "weight"
+    // Actions used internally:
+    "bad",
+    "new",
+    // Actual actions:
+    "boolean",
+    "date",
+    "field",
+    "gap",
+    "hash",
+    "hextobin",
+    "index",
+    "indexnopos",
+    "load",
+    "lower",
+    "ltrim",
+    "parsedate",
+    "rtrim",
+    "spell",
+    "split",
+    "squash",
+    "trim",
+    "truncate",
+    "unhtml",
+    "unique",
+    "value",
+    "valuenumeric",
+    "valuepacked",
+    "weight"
 };
 
 // For debugging:
 #define DUMP_ACTION(A) cout << action_names[(A).get_action()] << "(" << (A).get_string_arg() << "," << (A).get_num_arg() << ")" << endl
 
 class Action {
-public:
+  public:
     typedef enum {
-	BAD, NEW,
-	BOOLEAN, DATE, FIELD, HASH, HEXTOBIN, INDEX, INDEXNOPOS, LOAD, LOWER,
-	PARSEDATE, SPELL, SPLIT, TRUNCATE, UNHTML, UNIQUE, VALUE,
-	VALUENUMERIC, VALUEPACKED, WEIGHT
+	// Actions used internally:
+	BAD,
+	NEW,
+	// Actual actions:
+	BOOLEAN,
+	DATE,
+	FIELD,
+	GAP,
+	HASH,
+	HEXTOBIN,
+	INDEX,
+	INDEXNOPOS,
+	LOAD,
+	LOWER,
+	LTRIM,
+	PARSEDATE,
+	RTRIM,
+	SPELL,
+	SPLIT,
+	SQUASH,
+	TRIM,
+	TRUNCATE,
+	UNHTML,
+	UNIQUE,
+	VALUE,
+	VALUENUMERIC,
+	VALUEPACKED,
+	WEIGHT
     } type;
     enum { SPLIT_NONE, SPLIT_DEDUP, SPLIT_SORT, SPLIT_PREFIXES };
-private:
+  private:
     type action;
-    int num_arg;
+    int num_arg = 0;
     string string_arg;
     // Offset into indexscript line.
     size_t pos;
-public:
+  public:
     Action(type action_, size_t pos_)
-	: action(action_), num_arg(0), pos(pos_) { }
+	: action(action_), pos(pos_) { }
     Action(type action_, size_t pos_, const string & arg)
 	: action(action_), string_arg(arg), pos(pos_) {
 	num_arg = atoi(string_arg.c_str());
@@ -119,6 +167,49 @@ public:
     const string & get_string_arg() const { return string_arg; }
     size_t get_pos() const { return pos; }
 };
+
+// These allow searching for an Action with a particular Action::type using
+// std::find().
+
+inline bool
+operator==(const Action& a, Action::type t) { return a.get_action() == t; }
+
+inline bool
+operator==(Action::type t, const Action& a) { return a.get_action() == t; }
+
+inline bool
+operator!=(const Action& a, Action::type t) { return !(a == t); }
+
+inline bool
+operator!=(Action::type t, const Action& a) { return !(t == a); }
+
+static void
+ltrim(string& s, const string& chars)
+{
+    auto i = s.find_first_not_of(chars);
+    if (i) s.erase(0, i);
+}
+
+static void
+rtrim(string& s, const string& chars)
+{
+    s.resize(s.find_last_not_of(chars) + 1);
+}
+
+static void
+squash(string& s, const string& chars)
+{
+    string output;
+    output.reserve(s.size());
+    string::size_type i = 0;
+    while ((i = s.find_first_not_of(chars, i)) != string::npos) {
+	auto j = s.find_first_of(chars, i);
+	if (!output.empty()) output += ' ';
+	output.append(s, i, j - i);
+	i = j;
+    }
+    s = std::move(output);
+}
 
 enum diag_type { DIAG_ERROR, DIAG_WARN, DIAG_NOTE };
 
@@ -177,7 +268,8 @@ parse_index_script(const string &filename)
     }
     string line;
     size_t line_no = 0;
-    bool had_unique = false;
+    // Line number where we saw a `unique` action, or -1 if we haven't.
+    int unique_line_no = -1;
     while (getline(script, line)) {
 	++line_no;
 	vector<string> fields;
@@ -185,7 +277,10 @@ parse_index_script(const string &filename)
 	string::const_iterator i, j;
 	const string &s = line;
 	i = find_if(s.begin(), s.end(), [](char ch) { return !C_isspace(ch); });
-	if (i == s.end() || *i == '#') continue;
+	if (i == s.end() || *i == '#') {
+	    // Blank line or comment.
+	    continue;
+	}
 	while (true) {
 	    if (!C_isalnum(*i)) {
 		report_location(DIAG_ERROR, filename, line_no, i - s.begin());
@@ -239,6 +334,13 @@ parse_index_script(const string &filename)
 			    max_args = 1;
 			}
 			break;
+		    case 'g':
+			if (action == "gap") {
+			    code = Action::GAP;
+			    max_args = 1;
+			    takes_integer_argument = true;
+			}
+			break;
 		    case 'h':
 			if (action == "hash") {
 			    code = Action::HASH;
@@ -262,12 +364,21 @@ parse_index_script(const string &filename)
 			    code = Action::LOWER;
 			} else if (action == "load") {
 			    code = Action::LOAD;
+			} else if (action == "ltrim") {
+			    code = Action::LTRIM;
+			    max_args = 1;
 			}
 			break;
 		    case 'p':
 			if (action == "parsedate") {
 			    code = Action::PARSEDATE;
 			    min_args = max_args = 1;
+			}
+			break;
+		    case 'r':
+			if (action == "rtrim") {
+			    code = Action::RTRIM;
+			    max_args = 1;
 			}
 			break;
 		    case 's':
@@ -277,6 +388,9 @@ parse_index_script(const string &filename)
 			    code = Action::SPLIT;
 			    min_args = 1;
 			    max_args = 2;
+			} else if (action == "squash") {
+			    code = Action::SQUASH;
+			    max_args = 1;
 			}
 			break;
 		    case 't':
@@ -284,6 +398,9 @@ parse_index_script(const string &filename)
 			    code = Action::TRUNCATE;
 			    min_args = max_args = 1;
 			    takes_integer_argument = true;
+			} else if (action == "trim") {
+			    code = Action::TRIM;
+			    max_args = 1;
 			}
 			break;
 		    case 'u':
@@ -575,18 +692,34 @@ bad_escaping:
 			actions.emplace_back(code, action_pos, val);
 			break;
 		    case Action::UNIQUE:
-			if (had_unique) {
+			if (unique_line_no >= 0) {
 			    report_location(DIAG_ERROR, filename, line_no,
 					    action_pos);
 			    cerr << "Index action 'unique' used more than once"
 				 << endl;
+			    report_location(DIAG_NOTE, filename,
+					    unique_line_no);
+			    cerr << "Previously used here" << endl;
 			    exit(1);
 			}
-			had_unique = true;
+			unique_line_no = line_no;
 			if (boolmap.find(val) == boolmap.end())
 			    boolmap[val] = Action::UNIQUE;
 			actions.emplace_back(code, action_pos, val);
 			break;
+		    case Action::GAP: {
+			actions.emplace_back(code, action_pos, val);
+			auto& obj = actions.back();
+			auto gap_size = obj.get_num_arg();
+			if (gap_size <= 0) {
+			    report_location(DIAG_ERROR, filename, line_no,
+					    obj.get_pos() + 3 + 1);
+			    cerr << "Index action 'gap' takes a strictly "
+				    "positive integer argument" << endl;
+			    exit(1);
+			}
+			break;
+		    }
 		    case Action::HASH: {
 			actions.emplace_back(code, action_pos, val);
 			auto& obj = actions.back();
@@ -600,6 +733,24 @@ bad_escaping:
 			}
 			break;
 		    }
+		    case Action::LTRIM:
+		    case Action::RTRIM:
+		    case Action::SQUASH:
+		    case Action::TRIM:
+			for (unsigned char ch : val) {
+			    if (ch >= 0x80) {
+				auto column = actions.back().get_pos() +
+					      strlen(action_names[code]) + 1;
+				report_location(DIAG_ERROR, filename, line_no,
+						column);
+				cerr << "Index action '" << action_names[code]
+				     << "' only support ASCII characters "
+					"currently\n";
+				exit(1);
+			    }
+			}
+			actions.emplace_back(code, action_pos, val);
+			break;
 		    case Action::BOOLEAN:
 			boolmap[val] = Action::BOOLEAN;
 			/* FALLTHRU */
@@ -620,14 +771,28 @@ bad_escaping:
 			 << min_args << " arguments" << endl;
 		    exit(1);
 		}
-		if (code == Action::INDEX || code == Action::INDEXNOPOS) {
-		    useless_weight_pos = string::npos;
-		    actions.emplace_back(code, action_pos, "", weight);
-		} else if (code == Action::HASH) {
-		    actions.emplace_back(code, action_pos, "",
-					 MAX_SAFE_TERM_LENGTH - 1);
-		} else {
-		    actions.emplace_back(code, action_pos);
+		switch (code) {
+		    case Action::INDEX:
+		    case Action::INDEXNOPOS:
+			useless_weight_pos = string::npos;
+			actions.emplace_back(code, action_pos, "", weight);
+			break;
+		    case Action::GAP:
+			actions.emplace_back(code, action_pos, "", 100);
+			break;
+		    case Action::HASH:
+			actions.emplace_back(code, action_pos, "",
+					     MAX_SAFE_TERM_LENGTH - 1);
+			break;
+		    case Action::LTRIM:
+		    case Action::RTRIM:
+		    case Action::SQUASH:
+		    case Action::TRIM:
+			actions.emplace_back(code, action_pos, " \t\f\v\r\n");
+			break;
+		    default:
+			actions.emplace_back(code, action_pos);
+			break;
 		}
 	    }
 	    j = i;
@@ -645,8 +810,12 @@ bad_escaping:
 		case Action::HASH:
 		case Action::HEXTOBIN:
 		case Action::LOWER:
+		case Action::LTRIM:
 		case Action::PARSEDATE:
+		case Action::RTRIM:
 		case Action::SPELL:
+		case Action::SQUASH:
+		case Action::TRIM:
 		case Action::TRUNCATE:
 		case Action::UNHTML:
 		    done = false;
@@ -721,8 +890,6 @@ run_actions(vector<Action>::const_iterator action_it,
 		abort();
 	    case Action::NEW:
 		value = old_value;
-		// We're processing the same field again - give it a reprieve.
-		this_field_is_content = true;
 		break;
 	    case Action::FIELD:
 		if (!value.empty()) {
@@ -759,6 +926,9 @@ run_actions(vector<Action>::const_iterator action_it,
 		doc.add_boolean_term(term);
 		break;
 	    }
+	    case Action::GAP:
+		indexer.increase_termpos(action.get_num_arg());
+		break;
 	    case Action::HASH: {
 		unsigned int max_length = action.get_num_arg();
 		if (value.length() > max_length)
@@ -794,6 +964,19 @@ badhex:
 	    case Action::LOWER:
 		value = Xapian::Unicode::tolower(value);
 		break;
+	    case Action::LTRIM:
+		ltrim(value, action.get_string_arg());
+		break;
+	    case Action::RTRIM:
+		rtrim(value, action.get_string_arg());
+		break;
+	    case Action::TRIM:
+		rtrim(value, action.get_string_arg());
+		ltrim(value, action.get_string_arg());
+		break;
+	    case Action::SQUASH:
+		squash(value, action.get_string_arg());
+		break;
 	    case Action::LOAD: {
 		// If there's no input, just issue a warning.
 		if (value.empty()) {
@@ -822,12 +1005,8 @@ badhex:
 		indexer.set_flags(indexer.FLAG_SPELLING);
 		break;
 	    case Action::SPLIT: {
-		// Execute actions on the split up to the first NEW, if any.
-		vector<Action>::const_iterator split_end = action_it;
-		while (split_end != action_end &&
-		       split_end->get_action() != Action::NEW) {
-		    ++split_end;
-		}
+		// Find the end of the actions which split should execute.
+		auto split_end = find(action_it, action_end, Action::NEW);
 
 		int split_type = action.get_num_arg();
 		if (value.empty()) {
@@ -946,14 +1125,14 @@ badhex:
 		break;
 	    }
 	    case Action::UNHTML: {
-		MyHtmlParser p;
+		HtmlParser p;
 		try {
 		    // Default HTML character set is latin 1, though
 		    // not specifying one is deprecated these days.
-		    p.parse_html(value, "iso-8859-1", false);
+		    p.parse(value, "iso-8859-1", false);
 		} catch (const string & newcharset) {
 		    p.reset();
-		    p.parse_html(value, newcharset, true);
+		    p.parse(value, newcharset, true);
 		}
 		if (p.indexing_allowed)
 		    value = p.dump;

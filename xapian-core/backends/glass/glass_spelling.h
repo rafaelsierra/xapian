@@ -1,4 +1,4 @@
-/** @file glass_spelling.h
+/** @file
  * @brief Spelling correction data for a glass database.
  */
 /* Copyright (C) 2007,2008,2009,2010,2011,2014,2015,2016,2017 Olly Betts
@@ -170,8 +170,6 @@ class GlassSpellingTermList : public TermList {
     Xapian::termcount get_wdf() const;
 
     Xapian::doccount get_termfreq() const;
-
-    Xapian::termcount get_collection_freq() const;
 
     TermList * next();
 

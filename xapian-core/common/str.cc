@@ -1,4 +1,4 @@
-/** @file str.cc
+/** @file
  * @brief Convert types to std::string
  */
 /* Copyright (C) 2009,2012,2015,2017 Olly Betts
@@ -130,7 +130,7 @@ format(const char * fmt, T value)
 #ifdef SNPRINTF
     // If -1 is returned (as pre-ISO snprintf does if the buffer is too small,
     // it will be cast to > sizeof(buf) and handled appropriately.
-    size_t size = SNPRINTF_ISO(buf, sizeof(buf), fmt, value);
+    size_t size = SNPRINTF(buf, sizeof(buf), fmt, value);
     AssertRel(size,<=,sizeof(buf));
     if (size > sizeof(buf)) size = sizeof(buf);
 #else

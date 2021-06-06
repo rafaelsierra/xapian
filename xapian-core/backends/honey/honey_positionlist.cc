@@ -1,4 +1,4 @@
-/** @file honey_positionlist.cc
+/** @file
  * @brief A position list in a honey database.
  */
 /* Copyright (C) 2004,2005,2006,2008,2009,2010,2013,2017,2019 Olly Betts
@@ -35,8 +35,8 @@
 using namespace std;
 
 void
-HoneyPositionTable::pack(string & s,
-			 const Xapian::VecCOW<Xapian::termpos> & vec) const
+HoneyPositionTable::pack(string& s,
+			 const Xapian::VecCOW<Xapian::termpos>& vec) const
 {
     LOGCALL_VOID(DB, "HoneyPositionTable::pack", s | vec);
     Assert(!vec.empty());
@@ -54,7 +54,7 @@ HoneyPositionTable::pack(string & s,
 
 Xapian::termcount
 HoneyPositionTable::positionlist_count(Xapian::docid did,
-				       const string & term) const
+				       const string& term) const
 {
     LOGCALL(DB, Xapian::termcount, "HoneyPositionTable::positionlist_count", did | term);
 
@@ -63,8 +63,8 @@ HoneyPositionTable::positionlist_count(Xapian::docid did,
 	RETURN(0);
     }
 
-    const char * pos = data.data();
-    const char * end = pos + data.size();
+    const char* pos = data.data();
+    const char* end = pos + data.size();
     Xapian::termpos pos_last;
     if (!unpack_uint(&pos, end, &pos_last)) {
 	throw Xapian::DatabaseCorruptError("Position list data corrupt");

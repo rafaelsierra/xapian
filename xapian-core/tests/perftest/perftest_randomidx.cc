@@ -1,4 +1,4 @@
-/** @file perftest_randomidx.cc
+/** @file
  * @brief performance tests involving a randomly generated index
  */
 /* Copyright 2008 Lemur Consulting Ltd
@@ -144,5 +144,4 @@ DEFINE_TESTCASE(randomidx1, writable && !inmemory) {
     logger.indexing_end();
 
     logger.testcase_end();
-    return true;
 }

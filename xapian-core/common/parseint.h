@@ -1,4 +1,4 @@
-/** @file parseint.h
+/** @file
  * @brief Parse signed and unsigned type from string and check for trailing characters.
  */
 /* Copyright (C) 2019 Olly Betts
@@ -31,7 +31,7 @@ bool parse_unsigned(const char* p, T& res)
     do {
 	unsigned char digit = *p - '0';
 	if (digit > 9 ||
-	    mul_overflows(res, (unsigned int)10, res) ||
+	    mul_overflows(res, unsigned(10), res) ||
 	    add_overflows(res, digit, res)) {
 	    return false;
 	}
@@ -50,7 +50,7 @@ bool parse_signed(const char* p, T& res)
 	res = -temp;
 	return true;
     } else if (parse_unsigned(p, temp) &&
-	       temp <= std::numeric_limits<T>::max()) {
+	       temp <= unsigned_type(std::numeric_limits<T>::max())) {
 	res = temp;
 	return true;
     }

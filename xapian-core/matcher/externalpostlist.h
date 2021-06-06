@@ -1,4 +1,4 @@
-/** @file externalpostlist.h
+/** @file
  * @brief Return document ids from an external source.
  */
 /* Copyright 2008,2009,2011,2019 Olly Betts
@@ -22,7 +22,7 @@
 #ifndef XAPIAN_INCLUDED_EXTERNALPOSTLIST_H
 #define XAPIAN_INCLUDED_EXTERNALPOSTLIST_H
 
-#include "api/postlist.h"
+#include "backends/postlist.h"
 
 namespace Xapian {
     class PostingSource;
@@ -37,8 +37,7 @@ class ExternalPostList : public PostList {
     /// Disallow assignment.
     void operator=(const ExternalPostList &);
 
-    Xapian::PostingSource * source;
-    bool source_is_owned;
+    Xapian::Internal::opt_intrusive_ptr<Xapian::PostingSource> source;
 
     Xapian::docid current;
 
@@ -49,15 +48,14 @@ class ExternalPostList : public PostList {
   public:
     /** Constructor.
      *
-     *  @param matcher	The matcher to notify when maximum weight changes.
+     *  @param max_weight_cached_flag_ptr   Pointer to flag to clear when max
+     *					    weight changes.
      */
     ExternalPostList(const Xapian::Database & db,
 		     Xapian::PostingSource *source_,
 		     double factor_,
-		     PostListTree * matcher,
+		     bool* max_weight_cached_flag_ptr,
 		     Xapian::doccount shard_index);
-
-    ~ExternalPostList();
 
     Xapian::doccount get_termfreq_min() const;
 
@@ -68,7 +66,10 @@ class ExternalPostList : public PostList {
     Xapian::docid get_docid() const;
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
+
+    Xapian::termcount get_wdfdocmax() const;
 
     double recalc_maxweight();
 

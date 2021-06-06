@@ -24,6 +24,7 @@ noinst_HEADERS +=\
 	common/overflow.h\
 	common/pack.h\
 	common/parseint.h\
+	common/popcount.h\
 	common/posixy_wrapper.h\
 	common/pretty.h\
 	common/realtime.h\
@@ -61,6 +62,7 @@ lib_src +=\
 	common/keyword.cc\
 	common/msvc_dirent.cc\
 	common/omassert.cc\
+	common/pack.cc\
 	common/posixy_wrapper.cc\
 	common/replicate_utils.cc\
 	common/safe.cc\

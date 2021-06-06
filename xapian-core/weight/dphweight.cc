@@ -1,4 +1,4 @@
-/** @file dphweight.cc
+/** @file
  * @brief Xapian::DPHWeight class - The DPH weighting scheme of the DFR framework.
  */
 /* Copyright (C) 2013, 2014 Aarsh Shah
@@ -48,21 +48,20 @@ DPHWeight::init(double factor)
     }
 
     double F = get_collection_freq();
-    double N = get_collection_size();
     double wdf_lower = 1.0;
     double wdf_upper = get_wdf_upper_bound();
 
     double len_upper = get_doclength_upper_bound();
-
-    double min_wdf_to_len = wdf_lower / len_upper;
 
     if (wdf_upper == 0) {
 	upper_bound = 0.0;
 	return;
     }
 
+    double min_wdf_to_len = wdf_lower / len_upper;
+
     /* Calculate constant value to be used in get_sumpart(). */
-    log_constant = get_average_length() * N / F;
+    log_constant = get_total_length() / F;
     wqf_product_factor = get_wqf() * factor;
 
     // Calculate the upper bound on the weight.
@@ -84,11 +83,11 @@ DPHWeight::init(double factor)
 			 (wdf + 1.0). */
     /* Now, assuming len to be len_upper for the purpose of maximization,
        (d)/(dx) (x * (1 - x / c) * (1 - x / c)) / (x+1) =
-       ((c - x) * (c - x * (2 * x + 3))) / (c ^ 2 * (x + 1) ^ 2)
+       ((c - x) * (c - x * (2 * x + 3))) / (c² * (x + 1)²)
        Thus, if (c - x * (2 * x + 3)) is positive, the differentiation
        value will be positive and hence the function will be an
        increasing function. By finding the positive root of the equation
-       2 * x ^ 2 + 3 * x - c = 0, we get the value of x(wdf)
+       2 * x² + 3 * x - c = 0, we get the value of x(wdf)
        at which the differentiation value turns to negative from positive,
        and hence, the function will have maximum value for that value of wdf. */
     double wdf_root = 0.25 * (sqrt(8.0 * len_upper + 9.0) - 3.0);
@@ -138,7 +137,7 @@ DPHWeight::unserialise(const string& s) const
 
 double
 DPHWeight::get_sumpart(Xapian::termcount wdf, Xapian::termcount len,
-		       Xapian::termcount) const
+		       Xapian::termcount, Xapian::termcount) const
 {
     if (wdf == 0 || wdf == len) return 0.0;
 
@@ -161,7 +160,9 @@ DPHWeight::get_maxpart() const
 }
 
 double
-DPHWeight::get_sumextra(Xapian::termcount, Xapian::termcount) const
+DPHWeight::get_sumextra(Xapian::termcount,
+			Xapian::termcount,
+			Xapian::termcount) const
 {
     return 0;
 }

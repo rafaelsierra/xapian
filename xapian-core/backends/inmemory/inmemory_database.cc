@@ -1,9 +1,9 @@
-/** @file inmemory_database.cc
+/** @file
  * @brief C++ class definition for inmemory database access
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
  * Copyright 2002 Ananova Ltd
- * Copyright 2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2014,2017 Olly Betts
+ * Copyright 2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2014,2017,2019 Olly Betts
  * Copyright 2006,2009 Lemur Consulting Ltd
  *
  * This program is free software; you can redistribute it and/or
@@ -42,7 +42,7 @@
 #include <xapian/error.h>
 #include <xapian/valueiterator.h>
 
-using std::make_pair;
+using namespace std;
 using Xapian::Internal::intrusive_ptr;
 
 inline void
@@ -154,6 +154,12 @@ InMemoryPostList::get_description() const
     return term + ":" + str(termfreq);
 }
 
+Xapian::termcount
+InMemoryPostList::get_wdfdocmax() const
+{
+   return db->get_wdfdocmax(get_docid());
+}
+
 PositionList *
 InMemoryPostList::read_position_list()
 {
@@ -225,7 +231,8 @@ InMemoryTermList::accumulate_stats(Xapian::Internal::ExpandStats & stats) const
     if (db->is_closed()) InMemoryDatabase::throw_database_closed();
     Assert(started);
     Assert(!at_end());
-    stats.accumulate(InMemoryTermList::get_wdf(), document_length,
+    stats.accumulate(shard_index,
+		     InMemoryTermList::get_wdf(), document_length,
 		     InMemoryTermList::get_termfreq(),
 		     db->get_doccount());
 }
@@ -559,6 +566,20 @@ InMemoryDatabase::get_unique_terms(Xapian::docid did) const
     // unique_terms <= doclen.
     Xapian::termcount terms = termlists[did - 1].terms.size();
     return std::min(terms, Xapian::termcount(doclengths[did - 1]));
+}
+
+Xapian::termcount
+InMemoryDatabase::get_wdfdocmax(Xapian::docid did) const
+{
+    if (closed) InMemoryDatabase::throw_database_closed();
+    if (did == 0 || did > termlists.size() || !termlists[did - 1].is_valid)
+	throw Xapian::DocNotFoundError(string("Docid ") + str(did) +
+				 string(" not found"));
+    Xapian::termcount max_wdf = 0;
+    for (auto&& i : termlists[did - 1].terms) {
+	if (i.wdf > max_wdf) max_wdf = i.wdf;
+    }
+    return max_wdf;
 }
 
 TermList *
@@ -955,6 +976,13 @@ InMemoryDatabase::open_allterms(const string & prefix) const
     return new InMemoryAllTermsList(&postlists,
 				    intrusive_ptr<const InMemoryDatabase>(this),
 				    prefix);
+}
+
+Xapian::Database::Internal*
+InMemoryDatabase::update_lock(int /*flags*/)
+{
+    // InMemoryDatabase doesn't really distinguish writable and read-only.
+    return this;
 }
 
 void

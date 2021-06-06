@@ -1,4 +1,4 @@
-/** @file backendmanager_remoteprog.h
+/** @file
  * @brief BackendManager subclass for remoteprog databases.
  */
 /* Copyright (C) 2007,2009,2011 Olly Betts
@@ -55,9 +55,16 @@ class BackendManagerRemoteProg : public BackendManagerRemote {
     Xapian::WritableDatabase get_writable_database(const std::string & name,
 						   const std::string & file);
 
+    /// Create a RemoteProg Xapian::WritableDatabase object with specified args.
+    Xapian::WritableDatabase
+    get_remote_writable_database(std::string args);
+
     /// Create a RemoteProg Xapian::Database with the specified timeout.
     Xapian::Database get_remote_database(const std::vector<std::string> & files,
 					 unsigned int timeout);
+
+    /// Get RemoteProg Xapian::Database instance of database at path
+    Xapian::Database get_database_by_path(const std::string& path);
 
     /// Create a Database object for the last opened WritableDatabase.
     Xapian::Database get_writable_database_as_database();

@@ -1,4 +1,4 @@
-/** @file api_cluster.cc
+/** @file
  *  @brief Cluster API tests
  */
 /* Copyright (C) 2016 Richhiey Thomas
@@ -131,8 +131,6 @@ DEFINE_TESTCASE(cosine_distance1, generated)
     distance = d.similarity(x1, x2);
     TEST_REL(distance, >, 0);
     TEST_REL(distance, <=, 1);
-
-    return true;
 }
 
 /** Round Robin Test
@@ -153,10 +151,9 @@ DEFINE_TESTCASE(round_robin1, generated)
 	Xapian::DocumentSet d = cset[i].get_documents();
 	TEST(d.size() != 0);
     }
-    return true;
 }
 
-DEFINE_TESTCASE(stem_stopper1, backend)
+DEFINE_TESTCASE(stem_stopper1, !backend)
 {
     Xapian::Stem stemmer("english");
     // By default, stemming strategy used is STEM_SOME
@@ -186,6 +183,4 @@ DEFINE_TESTCASE(stem_stopper1, backend)
     stopper_none.add(term);
     TEST(stopper_none(term));
     TEST(!stopper_none('Z' + stemmer(term)));
-
-    return true;
 }

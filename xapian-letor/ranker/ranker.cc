@@ -1,4 +1,4 @@
-/** @file ranker.cc
+/** @file
  * @brief Implementation of Ranker class
  */
 /* Copyright (C) 2012 Parth Gupta
@@ -30,6 +30,7 @@
 #include "xapian-letor/scorer.h"
 
 #include "debuglog.h"
+#include "omassert.h"
 #include "str.h"
 
 #include <cstdio>
@@ -114,7 +115,7 @@ static int
 getlabel(const Document & doc, const std::string & qid)
 {
     int label = -1;
-    string id = std::to_string(doc.get_docid());
+    string id = str(doc.get_docid());
     map<string, map<string, int>>::const_iterator outerit;
     map<string, int>::const_iterator innerit;
 
@@ -192,32 +193,35 @@ write_to_file(const std::vector<Xapian::FeatureVector> & list_fvecs, const strin
     }
 }
 
+// Query file is in the format: <qid> '<query_string>'
+// Although it will accept any number of arbitrary characters between
+// the first space and the first single quote.
 static std::pair<string, string>
 parse_query_string(const string & query_line, int line_number)
 {
-    vector<string> token;
-    size_t j = 0;
-    while (j < query_line.size()) {
-	size_t i = query_line.find_first_not_of(' ', j);
-	if (i == string::npos) break;
-	j = query_line.find_first_of(' ', i);
-	token.push_back(query_line.substr(i, j - i));
+    Assert(!query_line.empty());
+    string::size_type j = query_line.find_first_of(' ');
+    if (j == 0) {
+	throw LetorParseError("Empty query id found in "
+			      "file at line:" + str(line_number));
     }
-    // Query file is in the format: <qid> <query_string>
-    // Therefore, <qid> goes into token[0] and <query_string> to token[1]
-    // Exceptions for parse errors
-    if (token.size() != 2) {
-	throw LetorParseError("Could not parse Query file at line:" + str(line_number));
+    if (j == string::npos) {
+	throw LetorParseError("Missing space between fields in Query "
+			      "file at line:" + str(line_number));
     }
-    string qid = token[0];
-    string querystr = token[1];
-    if (querystr.front() != '\'' || querystr.back() != '\'') {
-	throw LetorParseError("Could not parse query string at line:" + str(line_number));
+    string qid = query_line.substr(0, j);
+    string::size_type i = query_line.find_first_of("'", j);
+    j = query_line.length() - 1;
+    // check if the last character is '
+    if (query_line[j] != '\'' || j == i) {
+	throw LetorParseError("Could not parse Query file at line:" +
+			       str(line_number));
     }
-    querystr.erase(0, 1); // erase the first character (') from the front
-    querystr.erase(querystr.size() - 1); // erase the last character (')
+    string querystr = query_line.substr(i + 1, j - i - 1);
+
     if (querystr.empty()) {
-	throw LetorParseError("Empty query string in query file at line:" + str(line_number));
+	throw LetorParseError("Empty query string in query file at line:" +
+			       str(line_number));
     }
     return std::pair<string, string> (querystr, qid);
 }
@@ -262,6 +266,7 @@ Xapian::prepare_training_file(const string & db_path, const string & queryfile,
     }
 
     int query_count = 0;
+    set<string> queries;
     while (!myfile1.eof()) { // reading all the queries line by line from the query file
 	getline(myfile1, str1);
 	if (str1.empty()) {
@@ -272,6 +277,9 @@ Xapian::prepare_training_file(const string & db_path, const string & queryfile,
 	std::pair<string, string> parsed_query = parse_query_string(str1, query_count);
 	string querystr = parsed_query.first;
 	string qid = parsed_query.second;
+	if (!queries.insert(qid).second) {
+	    throw Xapian::LetorParseError("Query id should be unique");
+	}
 
 	Xapian::Query query_no_prefix = parser.parse_query(querystr,
 					parser.FLAG_DEFAULT|
@@ -452,8 +460,8 @@ Ranker::score(const string & query_file, const string & qrel_file,
 	enquire.set_query(query);
 	Xapian::MSet mset = enquire.get_mset(0, msetsize);
 
+	rank(mset, model_key, flist);
 	std::vector<FeatureVector> fvv_mset = flist.create_feature_vectors(mset, query, letor_db);
-	std::vector<FeatureVector> rankedfvv = rank_fvv(fvv_mset);
 	std::vector<FeatureVector> rankedfvv_qrel;
 
 	int k = 0;
@@ -461,12 +469,12 @@ Ranker::score(const string & query_file, const string & qrel_file,
 	    Xapian::Document doc = i.get_document();
 	    int label = getlabel(doc, qid);
 	    if (label != -1) { // only add FeatureVector which is found in the qrel file
-		rankedfvv[k].set_label(label);
-		rankedfvv_qrel.push_back(rankedfvv[k]);
+		fvv_mset[k].set_label(label);
+		rankedfvv_qrel.push_back(fvv_mset[k]);
 	    }
 	    ++k;
 	}
-	double iter_score = scorer->score(rankedfvv);
+	double iter_score = scorer->score(rankedfvv_qrel);
 	out_file << "Ranking score for qid:" << qid << " = " << iter_score << endl;
 	total_score += iter_score;
     }

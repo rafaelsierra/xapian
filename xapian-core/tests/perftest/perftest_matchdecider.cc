@@ -1,4 +1,4 @@
-/** @file perftest_matchdecider.cc
+/** @file
  * @brief performance tests for match decider
  */
 /* Copyright 2008 Lemur Consulting Ltd
@@ -123,7 +123,6 @@ DEFINE_TESTCASE(valuesetmatchdecider1, writable && !remote && !inmemory) {
     }
 
     logger.testcase_end();
-    return true;
 }
 
 // Test the performance of an AllDocsIterator.
@@ -146,5 +145,4 @@ DEFINE_TESTCASE(alldocsiter1, writable && !remote && !inmemory) {
     logger.searching_end();
 
     logger.testcase_end();
-    return true;
 }

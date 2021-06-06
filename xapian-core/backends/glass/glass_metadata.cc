@@ -1,4 +1,4 @@
-/** @file glass_metadata.cc
+/** @file
  * @brief Access to metadata for a glass database.
  */
 /* Copyright (C) 2004,2005,2006,2007,2008,2009,2010,2011,2017 Olly Betts
@@ -75,12 +75,6 @@ Xapian::doccount
 GlassMetadataTermList::get_termfreq() const
 {
     throw Xapian::InvalidOperationError("GlassMetadataTermList::get_termfreq() not meaningful");
-}
-
-Xapian::termcount
-GlassMetadataTermList::get_collection_freq() const
-{
-    throw Xapian::InvalidOperationError("GlassMetadataTermList::get_collection_freq() not meaningful");
 }
 
 TermList *

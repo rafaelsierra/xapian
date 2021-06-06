@@ -1,4 +1,4 @@
-/** @file  rset.h
+/** @file
  *  @brief Set of documents judged as relevant
  */
 /* Copyright (C) 2015,2016,2017 Olly Betts
@@ -23,7 +23,7 @@
 #define XAPIAN_INCLUDED_RSET_H
 
 #if !defined XAPIAN_IN_XAPIAN_H && !defined XAPIAN_LIB_BUILD
-# error "Never use <xapian/rset.h> directly; include <xapian.h> instead."
+# error Never use <xapian/rset.h> directly; include <xapian.h> instead.
 #endif
 
 #include <xapian/attributes.h>

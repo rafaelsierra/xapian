@@ -1,4 +1,4 @@
-/** @file description_append.cc
+/** @file
  *  @brief Append a string to an object description, escaping invalid UTF-8
  */
 /* Copyright (C) 2013 Olly Betts
@@ -29,7 +29,7 @@
 using namespace std;
 
 void
-description_append(std::string & desc, const std::string &s)
+description_append(std::string& desc, const std::string& s)
 {
     desc.reserve(desc.size() + s.size());
     for (Xapian::Utf8Iterator i(s); i != Xapian::Utf8Iterator(); ++i) {

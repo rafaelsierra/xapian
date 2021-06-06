@@ -1,4 +1,4 @@
-/** @file dbcheck.cc
+/** @file
  * @brief Check the consistency of a database or table.
  */
 /* Copyright 2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2019 Olly Betts
@@ -25,12 +25,19 @@
 #include "xapian/constants.h"
 #include "xapian/error.h"
 
+// We always need GLASS_TABLE_EXTENSION.
+#include "glass/glass_defs.h"
 #ifdef XAPIAN_HAS_GLASS_BACKEND
 #include "glass/glass_changes.h"
-#include "glass/glass_database.h"
 #include "glass/glass_dbcheck.h"
-#include "glass/glass_defs.h"
 #include "glass/glass_version.h"
+#endif
+
+// We always need HONEY_TABLE_EXTENSION.
+#include "honey/honey_defs.h"
+#ifdef XAPIAN_HAS_HONEY_BACKEND
+#include "honey/honey_dbcheck.h"
+#include "honey/honey_version.h"
 #endif
 
 #include "backends.h"
@@ -48,6 +55,19 @@ using namespace std;
 // Tables to check for a glass database.  Note: it's important to check
 // termlist before postlist so that we can cross-check the document lengths.
 static const struct { char name[9]; } glass_tables[] = {
+    { "docdata" },
+    { "termlist" },
+    { "postlist" },
+    { "position" },
+    { "spelling" },
+    { "synonym" }
+};
+#endif
+
+#ifdef XAPIAN_HAS_HONEY_BACKEND
+// Tables to check for a honey database.  Note: it's important to check
+// termlist before postlist so that we can cross-check the document lengths.
+static const struct { char name[9]; } honey_tables[] = {
     { "docdata" },
     { "termlist" },
     { "postlist" },
@@ -109,7 +129,7 @@ check_db_dir(const string & path, int opts, std::ostream *out)
 	try {
 	    // Check if the database can actually be opened.
 	    Xapian::Database db(path);
-	} catch (const Xapian::Error & e) {
+	} catch (const Xapian::Error& e) {
 	    // Continue - we can still usefully look at how it is broken.
 	    if (out)
 		*out << "Database couldn't be opened for reading: "
@@ -120,7 +140,7 @@ check_db_dir(const string & path, int opts, std::ostream *out)
 
 	GlassVersion version_file(path);
 	version_file.read();
-	for (glass_revision_number_t r = version_file.get_revision(); r != 0; --r) {
+	for (auto r = version_file.get_revision(); r != 0; --r) {
 	    string changes_file = path;
 	    changes_file += "/changes";
 	    changes_file += str(r);
@@ -154,10 +174,50 @@ check_db_dir(const string & path, int opts, std::ostream *out)
 	auto msg = "Honey database support isn't enabled";
 	throw Xapian::FeatureUnavailableError(msg);
 #else
-	(void)opts;
-	(void)out;
-	auto msg = "Honey database checking not implemented";
-	throw Xapian::UnimplementedError(msg);
+	// Check a whole honey database directory.
+	vector<Xapian::termcount> doclens;
+	size_t errors = 0;
+
+	try {
+	    // Check if the database can actually be opened.
+	    Xapian::Database db(path);
+	} catch (const Xapian::Error& e) {
+	    // Continue - we can still usefully look at how it is broken.
+	    if (out)
+		*out << "Database couldn't be opened for reading: "
+		     << e.get_description()
+		     << "\nContinuing check anyway" << endl;
+	    ++errors;
+	}
+
+	HoneyVersion version_file(path);
+	version_file.read();
+#if 0 // FIXME: Honey replication not yet implemented.
+	for (auto r = version_file.get_revision(); r != 0; --r) {
+	    string changes_file = path;
+	    changes_file += "/changes";
+	    changes_file += str(r);
+	    if (file_exists(changes_file))
+		HoneyChanges::check(changes_file);
+	}
+#endif
+
+	Xapian::docid doccount = version_file.get_doccount();
+	Xapian::docid db_last_docid = version_file.get_last_docid();
+	if (db_last_docid < doccount) {
+	    if (out)
+		*out << "last_docid = " << db_last_docid << " < doccount = "
+		     << doccount << endl;
+	    ++errors;
+	}
+	reserve_doclens(doclens, db_last_docid, out);
+
+	// Check all the tables.
+	for (auto t : honey_tables) {
+	    errors += check_honey_table(t.name, path, version_file, opts,
+					doclens, out);
+	}
+	return errors;
 #endif
     }
 
@@ -235,8 +295,10 @@ check_db_table(const string& filename, int opts, std::ostream* out, int backend)
 	auto msg = "Honey database support isn't enabled";
 	throw Xapian::FeatureUnavailableError(msg);
 #else
-	auto msg = "Honey database checking not implemented";
-	throw Xapian::UnimplementedError(msg);
+	HoneyVersion version_file(dir);
+	version_file.read();
+	return check_honey_table(tablename.c_str(), dir, version_file, opts,
+				 doclens, out);
 #endif
       }
 
@@ -395,6 +457,8 @@ Database::check_(const string * path_ptr, int fd, int opts, std::ostream *out)
 		backend = BACKEND_OLD;
 	    } else if (endswith(path, "." GLASS_TABLE_EXTENSION)) {
 		backend = BACKEND_GLASS;
+	    } else if (endswith(path, "." HONEY_TABLE_EXTENSION)) {
+		backend = BACKEND_HONEY;
 	    } else {
 		return check_stub(path, opts, out);
 	    }
@@ -420,6 +484,8 @@ Database::check_(const string * path_ptr, int fd, int opts, std::ostream *out)
 	backend = BACKEND_OLD;
     } else if (stat((filename + "." GLASS_TABLE_EXTENSION).c_str(), &sb) == 0) {
 	backend = BACKEND_GLASS;
+    } else if (stat((filename + "." HONEY_TABLE_EXTENSION).c_str(), &sb) == 0) {
+	backend = BACKEND_HONEY;
     } else {
 	auto msg = "Couldn't find Xapian database or table to check";
 	throw Xapian::DatabaseOpeningError(msg, ENOENT);

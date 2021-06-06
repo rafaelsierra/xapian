@@ -1,4 +1,4 @@
-/** @file testmacros.h
+/** @file
  * @brief Macros for testing conditions hold.
  */
 /* Copyright (C) 2009,2012 Olly Betts
@@ -24,7 +24,7 @@
 
 // FIXME: DEFINE_TESTCASE is used by apitest but is external and takes a flags
 // argument.
-#define DEFINE_TESTCASE_(T)	static bool test_##T()
+#define DEFINE_TESTCASE_(T)	static void test_##T()
 #define TESTCASE(T)		{ #T, test_##T }
 #define END_OF_TESTCASES	{ 0, 0 }
 

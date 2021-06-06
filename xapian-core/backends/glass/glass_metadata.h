@@ -1,4 +1,4 @@
-/** @file glass_metadata.h
+/** @file
  * @brief Access to metadata for a glass database.
  */
 /* Copyright (C) 2005,2007,2008,2009,2011,2017 Olly Betts
@@ -72,12 +72,6 @@ class GlassMetadataTermList : public AllTermsList {
      *  Not meaningful for a GlassMetadataTermList.
      */
     Xapian::doccount get_termfreq() const;
-
-    /** Return the collection frequency for the term at the current position.
-     *
-     *  Not meaningful for a GlassMetadataTermList.
-     */
-    Xapian::termcount get_collection_freq() const;
 
     /// Advance to the next term in the list.
     TermList * next();

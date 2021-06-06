@@ -1,7 +1,7 @@
-/** @file honey_freelist.cc
+/** @file
  * @brief Honey freelist
  */
-/* Copyright 2014,2015,2016 Olly Betts
+/* Copyright 2014,2015,2016,2020 Olly Betts
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -27,16 +27,9 @@
 #include "xapian/error.h"
 
 #include "omassert.h"
+#include "popcount.h"
 #include "wordaccess.h"
 #include <cstring>
-
-#if !HAVE_DECL___BUILTIN_POPCOUNT
-// Only include <intrin.h> if we have to as it can result in warnings about
-// duplicate declarations of builtin functions under mingw.
-# if HAVE_DECL___POPCNT || HAVE_DECL___POPCNT64
-#  include <intrin.h>
-# endif
-#endif
 
 using namespace std;
 using namespace Honey;
@@ -64,7 +57,7 @@ const unsigned C_BASE = 8;
 const uint4 UNUSED = static_cast<uint4>(-1);
 
 void
-HoneyFreeList::read_block(const HoneyTable * B, uint4 n, uint8_t * ptr)
+HoneyFreeList::read_block(const HoneyTable* B, uint4 n, uint8_t* ptr)
 {
 #ifdef SST_SEARCH
     (void)B; (void)n; (void)ptr;
@@ -76,7 +69,7 @@ HoneyFreeList::read_block(const HoneyTable * B, uint4 n, uint8_t * ptr)
 }
 
 void
-HoneyFreeList::write_block(const HoneyTable * B, uint4 n, uint8_t * ptr,
+HoneyFreeList::write_block(const HoneyTable* B, uint4 n, uint8_t* ptr,
 			   uint4 rev)
 {
 #ifdef SST_SEARCH
@@ -90,7 +83,7 @@ HoneyFreeList::write_block(const HoneyTable * B, uint4 n, uint8_t * ptr,
 }
 
 uint4
-HoneyFreeList::get_block(const HoneyTable *B, uint4 block_size,
+HoneyFreeList::get_block(const HoneyTable* B, uint4 block_size,
 			 uint4 * blk_to_free)
 {
     if (fl == fl_end) {
@@ -148,7 +141,7 @@ HoneyFreeList::get_block(const HoneyTable *B, uint4 block_size,
 }
 
 uint4
-HoneyFreeList::walk(const HoneyTable *B, uint4 block_size, bool inclusive)
+HoneyFreeList::walk(const HoneyTable* B, uint4 block_size, bool inclusive)
 {
     if (fl == fl_end) {
 	// It's expected that the caller checks !empty() first.
@@ -196,7 +189,7 @@ HoneyFreeList::walk(const HoneyTable *B, uint4 block_size, bool inclusive)
 }
 
 void
-HoneyFreeList::mark_block_unused(const HoneyTable * B,
+HoneyFreeList::mark_block_unused(const HoneyTable* B,
 				 uint4 block_size,
 				 uint4 blk)
 {
@@ -254,7 +247,7 @@ HoneyFreeList::mark_block_unused(const HoneyTable * B,
 }
 
 void
-HoneyFreeList::commit(const HoneyTable * B, uint4 block_size)
+HoneyFreeList::commit(const HoneyTable* B, uint4 block_size)
 {
     if (pw && flw.c != 0) {
 	memset(pw + flw.c, 255, FREELIST_END - flw.c - 4);
@@ -275,7 +268,7 @@ HoneyFreeList::commit(const HoneyTable * B, uint4 block_size)
     }
 }
 
-HoneyFreeListChecker::HoneyFreeListChecker(const HoneyFreeList & fl)
+HoneyFreeListChecker::HoneyFreeListChecker(const HoneyFreeList& fl)
 {
     const unsigned BITS_PER_ELT = sizeof(elt_type) * 8;
     const elt_type ALL_BITS = static_cast<elt_type>(-1);
@@ -325,31 +318,7 @@ HoneyFreeListChecker::count_set_bits(uint4 * p_first_bad_blk) const
 	}
 
 	// Count set bits in elt.
-	if (false) {
-#if HAVE_DECL___BUILTIN_POPCOUNT
-	} else if (sizeof(elt_type) == sizeof(unsigned)) {
-	    c += __builtin_popcount(elt);
-#elif HAVE_DECL___POPCNT
-	} else if (sizeof(elt_type) == sizeof(unsigned)) {
-	    c += __popcnt(elt);
-#endif
-#if HAVE_DECL___BUILTIN_POPCOUNTL
-	} else if (sizeof(elt_type) == sizeof(unsigned long)) {
-	    c += __builtin_popcountl(elt);
-#endif
-#if HAVE_DECL___BUILTIN_POPCOUNTLL
-	} else if (sizeof(elt_type) == sizeof(unsigned long long)) {
-	    c += __builtin_popcountll(elt);
-#elif HAVE_DECL___POPCNT64
-	} else if (sizeof(elt_type) == sizeof(unsigned long long)) {
-	    c += __popcnt64(elt);
-#endif
-	} else {
-	    do {
-		++c;
-		elt &= elt - 1;
-	    } while (elt);
-	}
+	add_popcount(c, elt);
     }
     return c;
 }

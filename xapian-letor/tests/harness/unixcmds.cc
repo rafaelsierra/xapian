@@ -1,4 +1,4 @@
-/** @file unixcmds.cc
+/** @file
  *  @brief C++ function versions of useful Unix commands.
  */
 /* Copyright (C) 2003,2004,2007,2012,2014,2015,2018 Olly Betts
@@ -23,6 +23,7 @@
 #include "unixcmds.h"
 
 #include <string>
+#include <cerrno>
 #include <cstdlib>
 #include <sys/types.h>
 #include "safeunistd.h"

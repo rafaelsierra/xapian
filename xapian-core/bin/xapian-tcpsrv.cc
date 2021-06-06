@@ -1,4 +1,4 @@
-/** @file xapian-tcpsrv.cc
+/** @file
  * @brief tcp daemon for use with Xapian's remote backend
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -33,7 +33,7 @@
 #include "xapian/constants.h"
 #include "xapian/error.h"
 #include "parseint.h"
-#include "net/remotetcpserver.h"
+#include "remotetcpserver.h"
 #include "net/remoteserver.h"
 #include "stringutils.h"
 

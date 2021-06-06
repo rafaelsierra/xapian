@@ -1,4 +1,4 @@
-/** @file queryparser.h
+/** @file
  * @brief parsing a user query string to build a Xapian::Query object
  */
 /* Copyright (C) 2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018 Olly Betts
@@ -24,7 +24,7 @@
 #define XAPIAN_INCLUDED_QUERYPARSER_H
 
 #if !defined XAPIAN_IN_XAPIAN_H && !defined XAPIAN_LIB_BUILD
-# error "Never use <xapian/queryparser.h> directly; include <xapian.h> instead."
+# error Never use <xapian/queryparser.h> directly; include <xapian.h> instead.
 #endif
 
 #include <xapian/attributes.h>
@@ -659,12 +659,38 @@ class XAPIAN_VISIBILITY_DEFAULT QueryParser {
 	 */
 	FLAG_FUZZY = 32768,
 
+	/** Accumulate unstem and stoplist results.
+	 *
+	 *  By default, the unstem and stoplist data is reset by a call to
+	 *  parse_query(), which makes sense if you use the same QueryParser
+	 *  object to parse a series of independent queries.
+	 *
+	 *  If you're using the same QueryParser object to parse several
+	 *  fields on the same query form, you may want to have the unstem
+	 *  and stoplist data combined for all of them, in which case you
+	 *  can use this flag to prevent this data from being reset.
+	 *
+	 *  @since Added in Xapian 1.4.18.
+	 */
+	FLAG_ACCUMULATE = 65536,
+
+	/** Produce a query which doesn't use positional information.
+	 *
+	 *  With this flag enabled, no positional information will be used
+	 *  and any query operations which would use it are replaced by
+	 *  the nearest equivalent which doesn't (so phrase searches, NEAR
+	 *  and ADJ will result in OP_AND).
+	 *
+	 *  @since Added in Xapian 1.4.19.
+	 */
+	FLAG_NO_POSITIONS = 0x20000,
+
 	/** The default flags.
 	 *
 	 *  Used if you don't explicitly pass any to @a parse_query().
 	 *  The default flags are FLAG_PHRASE|FLAG_BOOLEAN|FLAG_LOVEHATE.
 	 *
-	 *  Added in Xapian 1.0.11.
+	 *  @since Added in Xapian 1.0.11.
 	 */
 	FLAG_DEFAULT = FLAG_PHRASE|FLAG_BOOLEAN|FLAG_LOVEHATE
     } feature_flag;
@@ -819,7 +845,7 @@ class XAPIAN_VISIBILITY_DEFAULT QueryParser {
      *				the limit for both wildcards and partial
      *				terms).
      *
-     *  Added in Xapian 1.5.0.
+     *  @since Added in Xapian 1.5.0.
      */
     void set_min_wildcard_prefix(unsigned min_prefix_len,
 				 unsigned flags = FLAG_WILDCARD|FLAG_PARTIAL);
@@ -1002,7 +1028,7 @@ class XAPIAN_VISIBILITY_DEFAULT QueryParser {
     TermIterator stoplist_begin() const;
 
     /// End iterator over terms omitted from the query as stopwords.
-    TermIterator XAPIAN_NOTHROW(stoplist_end() const) {
+    TermIterator stoplist_end() const noexcept {
 	return TermIterator();
     }
 
@@ -1010,7 +1036,7 @@ class XAPIAN_VISIBILITY_DEFAULT QueryParser {
     TermIterator unstem_begin(const std::string &term) const;
 
     /// End iterator over unstemmed forms of the given stemmed query term.
-    TermIterator XAPIAN_NOTHROW(unstem_end(const std::string &) const) {
+    TermIterator unstem_end(const std::string&) const noexcept {
 	return TermIterator();
     }
 
@@ -1033,7 +1059,7 @@ class XAPIAN_VISIBILITY_DEFAULT QueryParser {
 
 /// @private @internal Helper for sortable_serialise().
 XAPIAN_VISIBILITY_DEFAULT
-size_t XAPIAN_NOTHROW(sortable_serialise_(double value, char * buf));
+size_t sortable_serialise_(double value, char* buf) noexcept;
 
 /** Convert a floating point number to a string, preserving sort order.
  *
@@ -1081,7 +1107,7 @@ inline std::string sortable_serialise(double value) {
  *  @param serialised	The serialised string to decode.
  */
 XAPIAN_VISIBILITY_DEFAULT
-double XAPIAN_NOTHROW(sortable_unserialise(const std::string & serialised));
+double sortable_unserialise(const std::string& serialised) noexcept;
 
 }
 

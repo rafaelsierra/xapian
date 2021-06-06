@@ -16,15 +16,19 @@ for parameter values enclosed in double quotes: ``\\``, ``\"``, ``\0``, ``\t``,
 ``\n``, ``\r``, and ``\x`` followed by two hex digits.
 
 The actions are applied in the specified order to each field listed, and
-fields can be listed in several lines.
+a field can be listed in multiple lines.
+
+Comments are allowed on a line by themselves, introduced by a ``#``.
 
 Here's an example::
 
  desc1 : unhtml index truncate=200 field=sample
  desc2 desc3 desc4 : unhtml index
+ # This is a comment.
  name : field=caption weight=3 index
- ref : field=ref boolean=Q unique=Q
- type : field=type boolean=XT
+ ref : boolean=Q unique=Q
+ type : boolean=XT
+ ref type : field
 
 Don't put spaces around the ``=`` separating an action and its argument -
 current versions allow spaces here (though this was never documented as
@@ -71,6 +75,11 @@ field[=FIELDNAME]
 	a given field: all instances will be processed and stored in the
 	Xapian record.
 
+gap[=SIZE]
+        leave a gap of SIZE term positions.  SIZE defaults to 100.  This
+        provides a way to stop phrases, ``NEAR`` and ``ADJ`` from matching
+        across fields.
+
 hash[=LENGTH]
 	Xapian has a limit on the length of a term.  To handle arbitrarily
 	long URLs as terms, omindex implements a scheme where the end of
@@ -110,6 +119,15 @@ load
 lower
 	lowercase the text (useful for generating boolean terms)
 
+ltrim[=CHARACTERSTOTRIM]
+        remove leading characters from the text which are in
+        ``CHARACTERSTOTRIM`` (default: space, tab, formfeed, vertical tab,
+        carriage return, linefeed).
+
+        Currently only ASCII characters are supported in ``CHARACTERSTOTRIM``.
+
+        See also ``rtrim``, ``squash`` and ``trim``.
+
 parsedate=FORMAT
         parse the text as a date string using ``strptime()`` (or C++11's
         ``std::get_time()`` on platforms without ``strptime()``) with the
@@ -130,6 +148,15 @@ parsedate=FORMAT
 
         ``parsedate`` was added in Omega 1.4.6.
 
+rtrim[=CHARACTERSTOTRIM]
+        remove trailing characters from the text which are in
+        ``CHARACTERSTOTRIM`` (default: space, tab, formfeed, vertical tab,
+        carriage return, linefeed).
+
+        Currently only ASCII characters are supported in ``CHARACTERSTOTRIM``.
+
+        See also ``ltrim``, ``squash`` and ``trim``.
+
 spell
         Generate spelling correction data for any ``index`` or ``indexnopos``
         actions in the remainder of this list of actions.
@@ -147,6 +174,26 @@ split=DELIMITER[,OPERATION]
         If you want to specify ``,`` for delimiter, you need to quote it, e.g.
         ``split=",",dedup``.
 
+squash[=CHARACTERSTOTRIM]
+        replace runs of one or more characters from ``CHARACTERSTOTRIM`` in the
+        text with a single space.  Leading and trailing runs are removed entirely.
+
+        ``CHARACTERSTOTRIM`` defaults to: space, tab, formfeed, vertical tab,
+        carriage return, linefeed).
+
+        Currently only ASCII characters are supported in ``CHARACTERSTOTRIM``.
+
+        See also ``ltrim``, ``rtrim`` and ``trim``.
+
+trim[=CHARACTERSTOTRIM]
+        remove leading and trailing characters from the text which are in
+        ``CHARACTERSTOTRIM`` (default: space, tab, formfeed, vertical tab,
+        carriage return, linefeed).
+
+        Currently only ASCII characters are supported in ``CHARACTERSTOTRIM``.
+
+        See also ``ltrim``, ``rtrim`` and ``squash``.
+
 truncate=LENGTH
 	truncate to at most LENGTH bytes, but avoid chopping off a word (useful
 	for sample and title fields)
@@ -159,12 +206,22 @@ unique[=PREFIX]
 	a warning is issued but nothing else is done.  Only one record with
 	each value of the ID may be present in the index: adding a new record
 	with an ID which is already present will cause the old record to be
-	replaced (or deleted if the new record is otherwise empty).  You should
-	also index the field as a boolean field using the same prefix so that
-        the old record can be found.  In Omega, ``Q`` is conventionally used as
-        the prefix of a unique term.  You can use ``unique`` at most once in
-        each index script (this is only enforced since Omega 1.4.5, but older
-        versions didn't handle multiple instances usefully).
+        replaced or deleted.
+
+        Deletion happens if the only input field present has the `unique`
+        action applied to it.  (Prior to 1.5.0, if there were multiple lists
+        of actions applied to an input field this triggered replacement instead
+        of deletion).  If you want to suppress this deletion feature, supplying
+        a dummy input field which doesn't match the index script will achieve
+        this.
+
+        You should also index the field as a boolean field using the same
+        prefix so that the old record can be found.  In Omega, ``Q`` is
+        conventionally used as the prefix of a unique term.
+
+        You can use ``unique`` at most once in each index script (this is only
+        enforced since Omega 1.4.5, but older versions didn't handle multiple
+        instances usefully).
 
 value=VALUESLOT
 	add as a Xapian document value in slot VALUESLOT.  Values can be used

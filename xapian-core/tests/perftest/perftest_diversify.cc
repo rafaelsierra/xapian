@@ -1,4 +1,4 @@
-/** @file perftest_diversify.cc
+/** @file
  * @brief performance tests for diversification
  */
 /* Copyright 2018 Uppinder Chugh
@@ -62,5 +62,4 @@ DEFINE_TESTCASE(perfdiversify1, writable && !remote && !inmemory)
     logger.diversifying_end();
 
     logger.testcase_end();
-    return true;
 }

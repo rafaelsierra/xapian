@@ -1,4 +1,4 @@
-/** @file glass_postlist.cc
+/** @file
  * @brief Postlists in a glass database
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -33,6 +33,7 @@
 #include "unicode/description_append.h"
 
 using Xapian::Internal::intrusive_ptr;
+using namespace std;
 
 // Static functions
 
@@ -43,11 +44,12 @@ static void report_read_error(const char * position)
     if (position == 0) {
 	// data ran out
 	LOGLINE(DB, "GlassPostList data ran out");
-	throw Xapian::DatabaseCorruptError("Data ran out unexpectedly when reading posting list.");
+	throw Xapian::DatabaseCorruptError("Data ran out unexpectedly when "
+					   "reading posting list");
     }
     // overflow
     LOGLINE(DB, "GlassPostList value too large");
-    throw Xapian::RangeError("Value in posting list too large.");
+    throw Xapian::RangeError("Value in posting list too large");
 }
 
 static inline bool
@@ -230,45 +232,45 @@ const unsigned int CHUNKSIZE = 2000;
  *  not really needed.
  */
 class Glass::PostlistChunkWriter {
-    public:
-	PostlistChunkWriter(const string &orig_key_,
-			    bool is_first_chunk_,
-			    const string &tname_,
-			    bool is_last_chunk_);
+  public:
+    PostlistChunkWriter(const string &orig_key_,
+			bool is_first_chunk_,
+			const string &tname_,
+			bool is_last_chunk_);
 
-	/// Append an entry to this chunk.
-	void append(GlassTable * table, Xapian::docid did,
-		    Xapian::termcount wdf);
+    /// Append an entry to this chunk.
+    void append(GlassTable * table, Xapian::docid did,
+		Xapian::termcount wdf);
 
-	/// Append a block of raw entries to this chunk.
-	void raw_append(Xapian::docid first_did_, Xapian::docid current_did_,
-			const string & s) {
-	    Assert(!started);
-	    first_did = first_did_;
-	    current_did = current_did_;
-	    if (!s.empty()) {
-		chunk.append(s);
-		started = true;
-	    }
+    /// Append a block of raw entries to this chunk.
+    void raw_append(Xapian::docid first_did_, Xapian::docid current_did_,
+		    const string & s) {
+	Assert(!started);
+	first_did = first_did_;
+	current_did = current_did_;
+	if (!s.empty()) {
+	    chunk.append(s);
+	    started = true;
 	}
+    }
 
-	/** Flush the chunk to the buffered table.  Note: this may write it
-	 *  with a different key to the original one, if for example the first
-	 *  entry has changed.
-	 */
-	void flush(GlassTable *table);
+    /** Flush the chunk to the buffered table.  Note: this may write it
+     *  with a different key to the original one, if for example the first
+     *  entry has changed.
+     */
+    void flush(GlassTable *table);
 
-    private:
-	string orig_key;
-	string tname;
-	bool is_first_chunk;
-	bool is_last_chunk;
-	bool started;
+  private:
+    string orig_key;
+    string tname;
+    bool is_first_chunk;
+    bool is_last_chunk;
+    bool started;
 
-	Xapian::docid first_did;
-	Xapian::docid current_did;
+    Xapian::docid first_did;
+    Xapian::docid current_did;
 
-	string chunk;
+    string chunk;
 };
 
 using Glass::PostlistChunkWriter;
@@ -404,7 +406,7 @@ write_start_of_chunk(string & chunk,
 		     Xapian::docid first_did_in_chunk,
 		     Xapian::docid last_did_in_chunk)
 {
-    Assert((size_t)(end_of_chunk_header - start_of_chunk_header) <= chunk.size());
+    Assert(size_t(end_of_chunk_header - start_of_chunk_header) <= chunk.size());
 
     chunk.replace(start_of_chunk_header,
 		  end_of_chunk_header - start_of_chunk_header,
@@ -1243,7 +1245,7 @@ GlassPostListTable::merge_changes(const string &term,
 	if (pos == end) {
 	    add(current_key, newhdr);
 	} else {
-	    Assert((size_t)(pos - tag.data()) <= tag.size());
+	    Assert(size_t(pos - tag.data()) <= tag.size());
 	    tag.replace(0, pos - tag.data(), newhdr);
 	    add(current_key, tag);
 	}

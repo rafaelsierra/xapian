@@ -1,4 +1,4 @@
-/** @file documentvaluelist.h
+/** @file
  * @brief Iteration over values in a document.
  */
 /* Copyright (C) 2007,2008,2009,2011,2017 Olly Betts
@@ -28,7 +28,7 @@
 #include <map>
 
 /// Iteration over values in a document.
-class DocumentValueList : public ValueList {
+class DocumentValueList final : public ValueList {
     /// Don't allow assignment.
     void operator=(const DocumentValueList &) = delete;
 

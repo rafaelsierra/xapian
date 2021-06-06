@@ -1,4 +1,4 @@
-/** @file testsuite.cc
+/** @file
  * @brief a test suite engine
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -40,6 +40,7 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
 #include <ios>
 #include <iostream>
 #include <set>
@@ -113,6 +114,12 @@ bool test_driver::abort_on_error = false;
 string test_driver::col_red, test_driver::col_green;
 string test_driver::col_yellow, test_driver::col_reset;
 bool test_driver::use_cr = false;
+
+// time constant in seconds to mark tests as slow or not
+static const double SLOW_TEST_THRESHOLD = 10.00;
+
+// vector to store the slow tests
+static vector<pair<string, double>> slow_tests;
 
 void
 test_driver::write_and_clear_tout()
@@ -334,17 +341,7 @@ test_driver::runtest(const test_desc *test)
 		    lseek(vg_log_fd, 0, SEEK_END);
 		}
 #endif
-		if (!test->run()) {
-		    out << ' ';
-		    if (expected_failure) {
-			out << col_yellow << "XFAIL (" << expected_failure << ")";
-		    } else {
-			out << col_red << "FAILED";
-		    }
-		    out << col_reset;
-		    write_and_clear_tout();
-		    return expected_failure ? XFAIL : FAIL;
-		}
+		test->run();
 		if (verbose > 1)
 		    write_and_clear_tout();
 #ifndef NO_LIBXAPIAN
@@ -471,10 +468,10 @@ test_driver::runtest(const test_desc *test)
 		    }
 		    if (vg_reachable > 0) {
 			// C++ STL implementations often "horde" released
-			// memory - for GCC 3.4 and newer the runtest script
-			// sets GLIBCXX_FORCE_NEW=1 which will disable this
-			// behaviour so we avoid this issue, but for older
-			// GCC and other compilers this may be an issue.
+			// memory - the runtest script sets GLIBCXX_FORCE_NEW=1
+			// which under GCC will disable this behaviour and so
+			// we avoid this issue, but for other compilers this
+			// may be an issue.
 			//
 			// See also:
 			// http://valgrind.org/docs/FAQ/#faq.reports
@@ -698,7 +695,11 @@ test_driver::do_run_tests(vector<string>::const_iterator b,
 	if (do_this_test) {
 	    out << "Running test: " << test->name << "...";
 	    out.flush();
+	    auto starttime = chrono::high_resolution_clock::now();
 	    test_driver::test_result test_res = runtest(test);
+	    auto endtime = chrono::high_resolution_clock::now();
+	    auto test_duration = chrono::duration_cast<chrono::duration<double>>
+				 (endtime - starttime);
 #ifndef NO_LIBXAPIAN
 	    if (backendmanager)
 		backendmanager->clean_up();
@@ -706,10 +707,17 @@ test_driver::do_run_tests(vector<string>::const_iterator b,
 	    switch (test_res) {
 		case PASS:
 		    ++res.succeeded;
+
+		    if (test_duration.count() >= SLOW_TEST_THRESHOLD) {
+			slow_tests.emplace_back(test->name,
+						test_duration.count());
+		    }
+
 		    if (verbose || !use_cr) {
 			out << col_green << " ok" << col_reset << endl;
 		    } else {
-			out << "\r                                                                               \r";
+			out << "\r                                        "
+			       "                                       \r";
 		    }
 		    break;
 		case XFAIL:
@@ -790,6 +798,20 @@ test_driver::report(const test_driver::result &r, const string &desc)
 		 << " skipped." << endl;
 	} else {
 	    cout << "." << endl;
+	}
+
+	if (!slow_tests.empty()) {
+	    cout << "Slow tests: ";
+	    for (auto test = slow_tests.begin();
+		 test != slow_tests.end(); ++test) {
+		cout << test->first << " (" << test->second
+		     << " s)";
+		if (test + 1 != slow_tests.end()) {
+		    cout << ", ";
+		}
+	    }
+	    cout << "." << endl;
+	    slow_tests.clear();
 	}
     }
 }
@@ -884,7 +906,7 @@ test_driver::parse_command_line(int argc, char **argv)
 	if (p && *p) {
 	    unsigned int temp;
 	    if (!parse_unsigned(p, temp)) {
-		throw "Verbose must be a non-negative integer";
+		throw "VERBOSE must be a non-negative integer";
 	    }
 	    verbose = temp;
 	}
@@ -892,7 +914,7 @@ test_driver::parse_command_line(int argc, char **argv)
 
     while (argv[optind]) {
 	test_names.push_back(string(argv[optind]));
-	optind++;
+	++optind;
     }
 }
 

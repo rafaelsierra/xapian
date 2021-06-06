@@ -1,4 +1,4 @@
-/** @file maxpostlist.h
+/** @file
  * @brief N-way OR postlist with wt=max(wt_i)
  */
 /* Copyright (C) 2007,2009,2010,2011,2012,2013,2017,2018 Olly Betts
@@ -22,7 +22,7 @@
 #ifndef XAPIAN_INCLUDED_MAXPOSTLIST_H
 #define XAPIAN_INCLUDED_MAXPOSTLIST_H
 
-#include "api/postlist.h"
+#include "backends/postlist.h"
 #include "postlisttree.h"
 
 /// N-way OR postlist with wt=max(wt_i).
@@ -89,7 +89,8 @@ class MaxPostList : public PostList {
     Xapian::docid get_docid() const;
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
 
     bool at_end() const;
 

@@ -32,11 +32,12 @@
 /omindex
 /omindex-list
 /scriptindex
-/atomparsetest
+/atomparsertest
 /csvesctest
-/htmlparsetest
+/htmlparsertest
 /jsonesctest
 /md5test
+/omindexcheck
 /urlenctest
 /utf8converttest
 /*test.log
@@ -53,7 +54,7 @@
 /mimemap.h
 /mimemap.stamp
 /namedents.h
-/my-html-tok.h
+/html-tok.h
 /*.1
 /clickmodel/.deps
 /clickmodel/.dirstamp
@@ -61,3 +62,4 @@
 /clickmodel/tests/.dirstamp
 /generate-qrel-file
 /sdbntest
+/omindex_*

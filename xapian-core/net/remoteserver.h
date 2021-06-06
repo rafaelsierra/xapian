@@ -1,4 +1,4 @@
-/** @file remoteserver.h
+/** @file
  *  @brief Xapian remote backend server base class
  */
 /* Copyright (C) 2006,2007,2008,2009,2010,2014,2017 Olly Betts
@@ -206,6 +206,34 @@ class XAPIAN_VISIBILITY_DEFAULT RemoteServer : private RemoteConnection {
     XAPIAN_VISIBILITY_INTERNAL
     void msg_uniqueterms(const std::string & message);
 
+    // get max_wdf
+    XAPIAN_VISIBILITY_INTERNAL
+    void msg_wdfdocmax(const std::string& message);
+
+    // reconstruct document text
+    XAPIAN_VISIBILITY_INTERNAL
+    void msg_reconstructtext(const std::string& message);
+
+    // get synonyms for a term
+    XAPIAN_VISIBILITY_INTERNAL
+    void msg_synonymtermlist(const std::string& message);
+
+    // get terms with an entry in synonym table, starting with a prefix
+    XAPIAN_VISIBILITY_INTERNAL
+    void msg_synonymkeylist(const std::string& message);
+
+    // add a synonym
+    XAPIAN_VISIBILITY_INTERNAL
+    void msg_addsynonym(const std::string& message);
+
+    // remove a synonym
+    XAPIAN_VISIBILITY_INTERNAL
+    void msg_removesynonym(const std::string& message);
+
+    // clear synonyms for a term
+    XAPIAN_VISIBILITY_INTERNAL
+    void msg_clearsynonyms(const std::string& message);
+
   public:
     /** Construct a RemoteServer.
      *
@@ -234,9 +262,6 @@ class XAPIAN_VISIBILITY_DEFAULT RemoteServer : private RemoteConnection {
      *  non-Xapian exception is thrown.
      */
     void run();
-
-    /// Get the registry used for (un)serialisation.
-    const Xapian::Registry & get_registry() const { return reg; }
 
     /// Set the registry used for (un)serialisation.
     void set_registry(const Xapian::Registry & reg_) { reg = reg_; }

@@ -1,4 +1,4 @@
-/** @file multiandpostlist.h
+/** @file
  * @brief N-way AND postlist
  */
 /* Copyright (C) 2007,2009,2011,2017 Olly Betts
@@ -22,8 +22,8 @@
 #ifndef XAPIAN_INCLUDED_MULTIANDPOSTLIST_H
 #define XAPIAN_INCLUDED_MULTIANDPOSTLIST_H
 
+#include "backends/postlist.h"
 #include "omassert.h"
-#include "api/postlist.h"
 #include "postlisttree.h"
 
 #include <algorithm>
@@ -166,7 +166,8 @@ class MultiAndPostList : public PostList {
     Xapian::docid get_docid() const;
 
     double get_weight(Xapian::termcount doclen,
-		      Xapian::termcount unique_terms) const;
+		      Xapian::termcount unique_terms,
+		      Xapian::termcount wdfdocmax) const;
 
     bool at_end() const;
 

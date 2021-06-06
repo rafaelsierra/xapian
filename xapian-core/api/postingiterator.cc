@@ -1,4 +1,4 @@
-/** @file postingiterator.cc
+/** @file
  *  @brief Class for iterating over a list of document ids.
  */
 /* Copyright (C) 2008,2009,2010,2011,2013,2017 Olly Betts
@@ -25,7 +25,6 @@
 #include "api/postingiteratorinternal.h"
 #include "debuglog.h"
 #include "omassert.h"
-#include "postlist.h"
 
 using namespace std;
 
@@ -119,6 +118,14 @@ PostingIterator::get_unique_terms() const
     LOGCALL(API, Xapian::termcount, "PostingIterator::get_unique_terms", NO_ARGS);
     Assert(internal);
     RETURN(internal->get_unique_terms());
+}
+
+Xapian::termcount
+PostingIterator::get_wdfdocmax() const
+{
+    LOGCALL(API, Xapian::termcount, "PostingIterator::get_wdfdocmax", NO_ARGS);
+    Assert(internal);
+    RETURN(internal->get_wdfdocmax());
 }
 
 #if 0 // FIXME: TermIterator supports this, so PostingIterator really ought to.

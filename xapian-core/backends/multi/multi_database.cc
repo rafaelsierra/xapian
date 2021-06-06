@@ -1,7 +1,7 @@
-/** @file multi_database.cc
+/** @file
  * @brief Sharded database backend
  */
-/* Copyright (C) 2017 Olly Betts
+/* Copyright (C) 2017,2019,2020 Olly Betts
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -95,10 +95,13 @@ MultiDatabase::open_term_list(Xapian::docid did) const
 TermList*
 MultiDatabase::open_term_list_direct(Xapian::docid did) const
 {
-    size_t n_shards = shards.size();
-    auto shard = shards[shard_number(did, n_shards)];
+    Xapian::doccount n_shards = shards.size();
+    auto shard_index = shard_number(did, n_shards);
+    auto shard = shards[shard_index];
     Xapian::docid shard_did = shard_docid(did, n_shards);
-    return shard->open_term_list(shard_did);
+    TermList* res = shard->open_term_list(shard_did);
+    res->shard_index = shard_index;
+    return res;
 }
 
 TermList*
@@ -157,8 +160,8 @@ Xapian::docid
 MultiDatabase::get_lastdocid() const
 {
     Xapian::docid result = 0;
-    auto n_shards = shards.size();
-    for (size_t shard = 0; shard != n_shards; ++shard) {
+    Xapian::doccount n_shards = shards.size();
+    for (Xapian::doccount shard = 0; shard != n_shards; ++shard) {
 	Xapian::docid shard_lastdocid = shards[shard]->get_lastdocid();
 	if (shard_lastdocid == 0) {
 	    // This shard is empty, so doesn't influence lastdocid for the
@@ -305,7 +308,7 @@ ValueList*
 MultiDatabase::open_value_list(Xapian::valueno slot) const
 {
     SubValueList** valuelists = new SubValueList*[shards.size()];
-    size_t count = 0;
+    unsigned count = 0;
     try {
 	for (auto&& shard : shards) {
 	    ValueList* vl = shard->open_value_list(slot);
@@ -341,6 +344,17 @@ MultiDatabase::get_unique_terms(Xapian::docid did) const
     auto shard = shards[shard_number(did, n_shards)];
     auto shard_did = shard_docid(did, n_shards);
     return shard->get_unique_terms(shard_did);
+}
+
+Xapian::termcount
+MultiDatabase::get_wdfdocmax(Xapian::docid did) const
+{
+    Assert(did != 0);
+
+    auto n_shards = shards.size();
+    auto shard = shards[shard_number(did, n_shards)];
+    auto shard_did = shard_docid(did, n_shards);
+    return shard->get_wdfdocmax(shard_did);
 }
 
 Xapian::Document::Internal*
@@ -711,6 +725,22 @@ void
 MultiDatabase::set_metadata(const string& key, const string& value)
 {
     shards[0]->set_metadata(key, value);
+}
+
+string
+MultiDatabase::reconstruct_text(Xapian::docid did,
+				size_t length,
+				const string& prefix,
+				Xapian::termpos start_pos,
+				Xapian::termpos end_pos) const
+{
+    Assert(did != 0);
+
+    auto n_shards = shards.size();
+    auto shard = shards[shard_number(did, n_shards)];
+    auto shard_did = shard_docid(did, n_shards);
+    return shard->reconstruct_text(shard_did, length, prefix,
+				   start_pos, end_pos);
 }
 
 string

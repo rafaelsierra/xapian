@@ -1,4 +1,4 @@
-/** @file tradeweight.cc
+/** @file
  * @brief Xapian::TradEWeight class - The TradWeight scheme for query expansion.
  */
 /* Copyright (C) 2013 Aarsh Shah
@@ -32,11 +32,10 @@ double
 TradEWeight::get_weight() const
 {
     double reldocs_without_term = get_rsize() - stats.rtermfreq;
-    double num, denom;
-    num = (stats.rtermfreq + 0.5) * (get_dbsize() - stats.termfreq - reldocs_without_term + 0.5);
-
-    denom = (stats.termfreq - stats.rtermfreq + 0.5) * (reldocs_without_term + 0.5);
-
+    double num = (stats.rtermfreq + 0.5) *
+		 (get_dbsize() - stats.termfreq - reldocs_without_term + 0.5);
+    double denom = (stats.termfreq - stats.rtermfreq + 0.5) *
+		   (reldocs_without_term + 0.5);
     double tw = log(num / denom);
     return stats.multiplier * tw;
 }

@@ -1,4 +1,4 @@
-/** @file omega.cc
+/** @file
  * @brief Main module for omega (example CGI frontend for Xapian)
  */
 /* Copyright 1999,2000,2001 BrightStation PLC
@@ -23,11 +23,6 @@
  */
 
 #include <config.h>
-
-// If we're building against git after the expand API changed but before the
-// version gets bumped to 1.3.2, we'll get a deprecation warning from
-// get_eset() unless we suppress such warnings here.
-#define XAPIAN_DEPRECATED(D) D
 
 #include <cerrno>
 #include <cstdio>
@@ -97,6 +92,23 @@ map_dbname_to_dir(const string &database_name)
     return database_dir + database_name;
 }
 
+static void
+add_database(const string& this_dbname)
+{
+    if (!dbname.empty()) dbname += '/';
+    dbname += this_dbname;
+
+    Xapian::Database this_db(map_dbname_to_dir(this_dbname));
+    db.add_database(this_db);
+
+    size_t this_db_size = this_db.size();
+    size_t db_size = db.size();
+    size_t i = 0;
+    while (subdbs.size() != db_size) {
+	subdbs.emplace_back(this_dbname, i++, this_db_size);
+    }
+}
+
 // Get database(s) to search.
 template<typename IT>
 void
@@ -113,10 +125,7 @@ parse_db_params(const pair<IT, IT>& dbs)
 	    q = v.find('/', p);
 	    string s(v, p, q - p);
 	    if (!s.empty() && seen.find(s) == seen.end()) {
-		// Translate DB parameter to path of database directory
-		if (!dbname.empty()) dbname += '/';
-		dbname += s;
-		db.add_database(Xapian::Database(map_dbname_to_dir(s)));
+		add_database(s);
 		seen.insert(s);
 	    }
 	    if (q == string::npos) break;
@@ -127,6 +136,16 @@ parse_db_params(const pair<IT, IT>& dbs)
 
 int main(int argc, char *argv[])
 try {
+    {
+	// Check for SERVER_PROTOCOL=INCLUDED, which is set when we're being
+	// included in a page via a server-side include directive.  In this
+	// case we suppress sending a Content-Type: header.
+	const char* p = getenv("SERVER_PROTOCOL");
+	if (p && strcmp(p, "INCLUDED") == 0) {
+	    suppress_http_headers = true;
+	}
+    }
+
     read_config_file();
 
     option["flag_default"] = "true";
@@ -166,12 +185,12 @@ try {
     try {
 	parse_db_params(cgi_params.equal_range("DB"));
 	if (dbname.empty()) {
-	    dbname = default_db;
-	    db.add_database(Xapian::Database(map_dbname_to_dir(dbname)));
+	    add_database(default_db);
 	}
 	enquire = new Xapian::Enquire(db);
     } catch (const Xapian::Error &) {
 	enquire = NULL;
+	db = Xapian::Database();
     }
 
     hits_per_page = 0;
@@ -202,27 +221,36 @@ try {
     if (fmtname.empty())
 	fmtname = default_template;
 
-    val = cgi_params.find("MORELIKE");
-    if (enquire && val != cgi_params.end()) {
-	const string & v = val->second;
-	Xapian::docid docid = atol(v.c_str());
-	if (docid == 0) {
-	    // Assume it's MORELIKE=Quid1138 and that Quid1138 is a UID
-	    // from an external source - we just find the correspond docid
-	    Xapian::PostingIterator p = db.postlist_begin(v);
-	    if (p != db.postlist_end(v)) docid = *p;
+    auto ml = cgi_params.equal_range("MORELIKE");
+    if (enquire && ml.first != ml.second) {
+	Xapian::RSet tmprset;
+	for (auto i = ml.first; i != ml.second; ++i) {
+	    const string& v = i->second;
+	    Xapian::docid docid = atol(v.c_str());
+	    if (docid == 0) {
+		// Assume it's MORELIKE=Quid1138 and that Quid1138 is a UID
+		// from an external source - we just find the correspond docid.
+		Xapian::PostingIterator p = db.postlist_begin(v);
+		if (p != db.postlist_end(v)) docid = *p;
+	    }
+	    if (docid != 0) {
+		tmprset.add_document(docid);
+	    }
 	}
 
-	if (docid != 0) {
-	    Xapian::RSet tmprset;
-	    tmprset.add_document(docid);
-
+	if (!tmprset.empty()) {
 	    OmegaExpandDecider decider(db);
 	    set_expansion_scheme(*enquire, option);
 	    Xapian::ESet eset(enquire->get_eset(40, tmprset, &decider));
 	    string morelike_query;
 	    for (auto&& term : eset) {
-		if (!morelike_query.empty()) morelike_query += ' ';
+		if (!morelike_query.empty()) {
+		    if (default_op == Xapian::Query::OP_OR) {
+			morelike_query += ' ';
+		    } else {
+			morelike_query += " OR ";
+		    }
+		}
 		morelike_query += pretty_term(term);
 	    }
 	    add_query_string(string(), morelike_query);
@@ -420,19 +448,23 @@ try {
     }
 
     string date_start, date_end, date_span;
-    val = cgi_params.find("START");
-    if (val != cgi_params.end()) date_start = val->second;
-    val = cgi_params.find("END");
-    if (val != cgi_params.end()) date_end = val->second;
-    val = cgi_params.find("SPAN");
-    if (val != cgi_params.end()) date_span = val->second;
     val = cgi_params.find("DATEVALUE");
     Xapian::valueno date_value_slot = Xapian::BAD_VALUENO;
     if (val != cgi_params.end() &&
 	!parse_unsigned(val->second.c_str(), date_value_slot)) {
 	throw "DATEVALUE slot must be >= 0";
     }
-    add_date_filter(date_start, date_end, date_span, date_value_slot);
+    // Process DATEVALUE=n and associated values unless we saw START.n=...
+    // or END.n=... or SPAN.n=...
+    if (date_ranges.find(date_value_slot) == date_ranges.end()) {
+	val = cgi_params.find("START");
+	if (val != cgi_params.end()) date_start = val->second;
+	val = cgi_params.find("END");
+	if (val != cgi_params.end()) date_end = val->second;
+	val = cgi_params.find("SPAN");
+	if (val != cgi_params.end()) date_span = val->second;
+	add_date_filter(date_start, date_end, date_span, date_value_slot);
+    }
 
     // If more default_op values are supported, encode them as non-alnums
     // other than filter_sep, '!' or '$'.
@@ -642,7 +674,7 @@ try {
 } catch (const Xapian::Error &e) {
     if (!set_content_type && !suppress_http_headers)
 	cout << "Content-Type: text/html\n\n";
-    cout << "Exception: " << html_escape(e.get_msg()) << endl;
+    cout << "Exception: " << html_escape(e.get_description()) << endl;
 } catch (const std::exception &e) {
     if (!set_content_type && !suppress_http_headers)
 	cout << "Content-Type: text/html\n\n";

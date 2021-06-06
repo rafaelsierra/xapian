@@ -1,4 +1,4 @@
-/** @file  socket_utils.h
+/** @file
  *  @brief Socket handling utilities.
  */
 /* Copyright (C) 2006,2007,2008,2015 Olly Betts
@@ -34,9 +34,15 @@ extern HANDLE fd_to_handle(int fd);
 
 /// Close an fd, which might be a socket.
 extern void close_fd_or_socket(int fd);
+
 #else
+
+// For INET_ADDRSTRLEN and INET6_ADDRSTRLEN.
+#include <arpa/inet.h>
+
 // There's no distinction between sockets and other fds on UNIX.
 inline void close_fd_or_socket(int fd) { close(fd); }
+
 #endif
 
 /** Attempt to set socket-level timeouts.

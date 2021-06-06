@@ -1,4 +1,4 @@
-/** @file honey_postlisttable.h
+/** @file
  * @brief Subclass of HoneyTable which holds postlists.
  */
 /* Copyright (C) 2007,2008,2009,2010,2013,2014,2015,2016,2018 Olly Betts
@@ -44,7 +44,7 @@ class HoneyPostListTable : public HoneyTable {
      *  @param dbdir	    The directory the honey database is stored in.
      *  @param readonly	    true if we're opening read-only, else false.
      */
-    HoneyPostListTable(const std::string & dbdir, bool readonly)
+    HoneyPostListTable(const std::string& dbdir, bool readonly)
 	: HoneyTable("postlist", dbdir + "/postlist.", readonly) { }
 
     HoneyPostListTable(int fd, off_t offset_, bool readonly)
