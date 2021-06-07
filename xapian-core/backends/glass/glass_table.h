@@ -742,7 +742,6 @@ class GlassTable {
     void read_block(uint4 n, uint8_t *p) const;
     void write_block(uint4 n, const uint8_t *p,
 		     bool appending = false) const;
-    [[noreturn]]
     void set_overwritten() const;
     void block_to_cursor(Glass::Cursor *C_, int j, uint4 n) const;
     void alter();

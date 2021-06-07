@@ -38,6 +38,7 @@
 #include <cerrno>
 #include <cstring>   /* for memmove */
 #include <climits>   /* for CHAR_BIT */
+#include <iostream>
 
 #include "glass_freelist.h"
 #include "glass_changes.h"
@@ -289,11 +290,9 @@ void
 GlassTable::set_overwritten() const
 {
     LOGCALL_VOID(DB, "GlassTable::set_overwritten", NO_ARGS);
-    // If we're writable, there shouldn't be another writer who could cause
-    // overwritten to be flagged, so that's a DatabaseCorruptError.
-    if (writable)
-	throw Xapian::DatabaseCorruptError("Db block overwritten - are there multiple writers?");
-    throw Xapian::DatabaseModifiedError("The revision being read has been discarded - you should call Xapian::Database::reopen() and retry the operation");
+    // We're trying to rescue tags from a broken database so it's unhelpful
+    // to bail out on problems.
+    cout << "Child block older than parent block - continuing anyway\n";
 }
 
 /* block_to_cursor(C, j, n) puts block n into position C[j] of cursor
@@ -2064,7 +2063,7 @@ GlassTable::prev_for_sequential(Glass::Cursor * C_, int /*dummy*/) const
 	    }
 	    if (REVISION(p) > revision_number + writable) {
 		set_overwritten();
-		RETURN(false);
+		//RETURN(false);
 	    }
 	    if (GET_LEVEL(p) == 0) break;
 	}
@@ -2122,7 +2121,7 @@ GlassTable::next_for_sequential(Glass::Cursor * C_, int /*dummy*/) const
 	    }
 	    if (REVISION(p) > revision_number + writable) {
 		set_overwritten();
-		RETURN(false);
+		//RETURN(false);
 	    }
 	    if (GET_LEVEL(p) == 0) break;
 	}
