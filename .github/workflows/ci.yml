@@ -51,7 +51,8 @@ jobs:
             pngcrush \
             poppler \
             pygments \
-            python
+            python \
+            tesseract
         pip3 install sphinx docutils
         mkdir -p '${{ runner.temp }}/xapian-libsvm-fixed-include'
         ln -sF "`ls -1d /usr/local/Cellar/libsvm/3.*/include|tail -n 1`" '${{ runner.temp }}/xapian-libsvm-fixed-include/libsvm'
