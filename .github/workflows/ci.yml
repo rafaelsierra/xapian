@@ -35,6 +35,7 @@ jobs:
             graphviz \
             help2man \
             icu4c \
+            libabw \
             libarchive \
             libcdr \
             libetonyek \
@@ -44,10 +45,12 @@ jobs:
             libmwaw \
             libsvm \
             lua \
+            mono-mdk \
             pcre2 \
             pkgconfig \
             pngcrush \
             poppler \
+            pygments \
             python
         pip3 install sphinx docutils
         mkdir -p '${{ runner.temp }}/xapian-libsvm-fixed-include'
