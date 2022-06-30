@@ -56,7 +56,7 @@ extract(const string& filename,
     // Create the ocr if necessary
     if (!ocr) {
 	ocr = new TessBaseAPI();
-	if (ocr->Init(NULL, NULL))
+	if (ocr->Init(nullptr, nullptr))
 	    _Exit(1);
 	ocr->SetPageSegMode(PSM_AUTO_OSD);
     }
